@@ -1,20 +1,22 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session, declarative_base
+from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.ext.declarative import declarative_base
 from typing import Generator
 
 Base = declarative_base()
 
-# Эти функции/переменные будем использовать в приложении
+engine = None
+SessionLocal = None
+
 def get_db() -> Generator[Session, None, None]:
+    """Получить сессию базы данных"""
+    if SessionLocal is None:
+        raise RuntimeError("Database not initialized. Call init_db() first.")
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-
-# Для инициализации (будет вызываться из main.py)
-engine = None
-SessionLocal = None
 
 def init_db(database_url: str):
     global engine, SessionLocal
