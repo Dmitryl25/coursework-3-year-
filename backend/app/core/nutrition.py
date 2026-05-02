@@ -1,3 +1,5 @@
+from app.db.models import UserGoal
+
 # Расчет TDEE
 def calculate_tdee(user) -> float:
     if user.gender == "male":
@@ -9,8 +11,8 @@ def calculate_tdee(user) -> float:
 
 
 # Расчет БЖУ
-def calculate_macros(tdee: float, goal: str) -> dict:
-    if goal == "loss":
+def calculate_macros(tdee: float, goal: UserGoal) -> dict:
+    if goal == UserGoal.LOSS:
         calories = tdee - 500
         return {
             "calories": calories,
@@ -18,7 +20,7 @@ def calculate_macros(tdee: float, goal: str) -> dict:
             "fats": calories * 0.3 / 9,
             "carbohydrates": calories * 0.4 / 4
         }
-    elif goal == "maintain":
+    elif goal == UserGoal.MAINTAIN:
         calories = tdee
         return {
             "calories": calories,

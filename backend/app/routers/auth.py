@@ -10,9 +10,9 @@ from app.db.crud import (
     create_user,
     verify_password,
     get_user_with_tdee,
-    calculate_tdee,
-    get_user_by_id
+    get_user_by_id,
 )
+from app.core.nutrition import calculate_tdee, calculate_macros
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -69,12 +69,4 @@ async def get_daily_needs(user_id: int, db: Session = Depends(get_db)):
         )
     
     tdee = calculate_tdee(user)
-    
-    # Рекомендуемое распределение КБЖУ
-    # Белки: 30%, Жиры: 25%, Углеводы: 45%
-    return {
-        "tdee": tdee,
-        "recommended_proteins": (tdee * 0.3) / 4,  # 4 ккал на 1г белка
-        "recommended_fats": (tdee * 0.25) / 9,      # 9 ккал на 1г жиров
-        "recommended_carbohydrates": (tdee * 0.45) / 4  # 4 ккал на 1г углеводов
-    }
+    return calculate_macros(tdee, user.goal)

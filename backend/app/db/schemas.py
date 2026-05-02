@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from datetime import datetime, date
 from typing import Optional, List
 from enum import Enum
+from app.db.models import UserGoal
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -10,6 +11,7 @@ class UserBase(BaseModel):
     weight: float = Field(..., gt=0, le=500)
     height: float = Field(..., gt=0, le=300)
     activity_level: float = Field(..., ge=1.2, le=2.4)
+    goal: UserGoal = Field(default=UserGoal.MAINTAIN)
 
 class UserRegister(UserBase):
     password: str = Field(..., min_length=6)

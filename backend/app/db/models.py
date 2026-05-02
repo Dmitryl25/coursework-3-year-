@@ -13,6 +13,11 @@ class OCRStatus(enum.Enum):
     SUCCESS = "success"
     FAILED = "failed"
 
+class UserGoal(str, enum.Enum):
+    LOSS = "loss"
+    MAINTAIN = "maintain"
+    MASS = "mass"
+
 class User(Base):
     __tablename__ = "users"
 
@@ -26,6 +31,7 @@ class User(Base):
     weight = Column(Float, nullable=False)  # в кг
     height = Column(Float, nullable=False)  # в см
     activity_level = Column(Float, nullable=False)  # коэффициент от 1.2 до 2.4
+    goal = Column(Enum(UserGoal), nullable=False, default=UserGoal.MAINTAIN)
     
     # Связи
     diary_entries = relationship("DiaryEntry", back_populates="user", cascade="all, delete-orphan")
@@ -45,7 +51,8 @@ class Food(Base):
     proteins = Column(Float, nullable=False)    # белки в граммах
     fats = Column(Float, nullable=False)        # жиры в граммах
     carbohydrates = Column(Float, nullable=False)  # углеводы в граммах
-    
+
+
     # Связь с записями дневника
     diary_entries = relationship("DiaryEntry", back_populates="food")
     

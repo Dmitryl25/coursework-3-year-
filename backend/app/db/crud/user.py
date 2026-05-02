@@ -26,7 +26,8 @@ def create_user(db: Session, user: UserRegister) -> User:
         age=user.age,
         weight=user.weight,
         height=user.height,
-        activity_level=user.activity_level
+        activity_level=user.activity_level,
+        goal=user.goal
     )
     db.add(db_user)
     db.commit()
@@ -59,6 +60,7 @@ def get_user_with_tdee(db: Session, user_id: int) -> UserWithTDEE | None:
         weight=user.weight,
         height=user.height,
         activity_level=user.activity_level,
+        goal=user.goal,
         tdee=tdee,
         created_at=user.created_at,
         updated_at=user.updated_at

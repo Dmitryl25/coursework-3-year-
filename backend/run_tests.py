@@ -145,10 +145,16 @@ def main() -> int:
         "weight": 75.0,
         "height": 180.0,
         "activity_level": 1.5,
+        "goal": "loss",
     }
     code, body = request("POST", "/auth/register", json_body=user_payload)
-    ok = code == 201 and isinstance(body, dict) and body.get("email") == email
-    r.check("POST /auth/register", ok, f"{code} {body}")
+    ok = (
+        code == 201
+        and isinstance(body, dict)
+        and body.get("email") == email
+        and body.get("goal") == "loss"
+    )
+    r.check("POST /auth/register (goal echoed back)", ok, f"{code} {body}")
     user_id = body.get("id") if isinstance(body, dict) else None
 
     # duplicate registration
@@ -169,24 +175,65 @@ def main() -> int:
     r.check("POST /auth/login wrong password -> 401", code == 401, f"{code} {body}")
 
     # tdee
+    tdee_value: Optional[float] = None
     if user_id is not None:
         code, body = request("GET", f"/auth/user/{user_id}/tdee")
-        r.check(
-            "GET /auth/user/{id}/tdee",
-            code == 200 and isinstance(body, dict) and body.get("tdee", 0) > 0,
-            f"{code} {body}",
-        )
-        code, body = request("GET", f"/auth/user/{user_id}/daily-needs")
         ok = (
             code == 200
             and isinstance(body, dict)
             and body.get("tdee", 0) > 0
-            and body.get("recommended_proteins", 0) > 0
+            and body.get("goal") == "loss"
         )
-        r.check("GET /auth/user/{id}/daily-needs", ok, f"{code} {body}")
+        r.check("GET /auth/user/{id}/tdee (goal preserved)", ok, f"{code} {body}")
+        if isinstance(body, dict):
+            tdee_value = body.get("tdee")
+
+        # daily-needs теперь возвращает {calories, proteins, fats, carbohydrates}
+        # из calculate_macros. Для goal=loss: calories == tdee - 500.
+        code, body = request("GET", f"/auth/user/{user_id}/daily-needs")
+        ok = (
+            code == 200
+            and isinstance(body, dict)
+            and {"calories", "proteins", "fats", "carbohydrates"}.issubset(body)
+            and body.get("proteins", 0) > 0
+        )
+        r.check("GET /auth/user/{id}/daily-needs shape", ok, f"{code} {body}")
+
+        if tdee_value is not None and isinstance(body, dict):
+            expected = tdee_value - 500
+            ok = abs(body.get("calories", 0) - expected) < 0.5
+            r.check(
+                "daily-needs calories == tdee-500 (goal=loss)",
+                ok,
+                f"got {body.get('calories')}, expected {expected}",
+            )
 
         code, body = request("GET", "/auth/user/999999/tdee")
         r.check("GET /auth/user/{missing}/tdee -> 404", code == 404, f"{code} {body}")
+
+        # второй юзер с goal=mass -> daily-needs.calories == tdee + 300
+        email2 = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        user_payload2 = dict(user_payload, email=email2, goal="mass")
+        code, body = request("POST", "/auth/register", json_body=user_payload2)
+        user2_id = body.get("id") if code == 201 and isinstance(body, dict) else None
+        r.check("POST /auth/register goal=mass", user2_id is not None, f"{code} {body}")
+
+        if user2_id is not None:
+            code, tdee_body = request("GET", f"/auth/user/{user2_id}/tdee")
+            code, needs_body = request("GET", f"/auth/user/{user2_id}/daily-needs")
+            if isinstance(tdee_body, dict) and isinstance(needs_body, dict):
+                expected = tdee_body.get("tdee", 0) + 300
+                ok = abs(needs_body.get("calories", 0) - expected) < 0.5
+                r.check(
+                    "daily-needs calories == tdee+300 (goal=mass)",
+                    ok,
+                    f"got {needs_body.get('calories')}, expected {expected}",
+                )
+
+        # validation: bad goal
+        bad_goal = dict(user_payload, email=f"bg_{uuid.uuid4().hex[:6]}@e.com", goal="bulk")
+        code, body = request("POST", "/auth/register", json_body=bad_goal)
+        r.check("POST /auth/register bad goal -> 422", code == 422, f"{code} {body}")
 
     # ===== food =====
     r.section("Food")
