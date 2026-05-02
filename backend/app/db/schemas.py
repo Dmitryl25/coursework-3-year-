@@ -3,7 +3,6 @@ from datetime import datetime, date
 from typing import Optional, List
 from enum import Enum
 
-# ========== USER SCHEMAS ==========
 class UserBase(BaseModel):
     email: EmailStr
     gender: str
@@ -89,6 +88,13 @@ class WeeklyStats(BaseModel):
     total_calories: float
     average_calories: float
 
+class RecommendationResponse(BaseModel):
+    tdee: float
+    consumed: DailyStats
+    remaining_calories: float
+    message: str
+
+
 # ========== OCR SCHEMAS ==========
 class OCRStatusEnum(str, Enum):
     PENDING = "pending"
@@ -118,3 +124,24 @@ class OCRProcessResponse(BaseModel):
     log_id: int
     status: str
     extracted_text: Optional[str] = None
+
+# Одна распознанная позиция с фото
+class RecognizedItem(BaseModel):
+    raw_text: str = Field(..., min_length=1)
+    weight_g: float = Field(..., gt=0, le=10000)
+    matched_food_id: Optional[int] = None
+    matched_name: Optional[str] = None
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+
+# Ответ, который отдаёт эндпоинт /ocr/recognize
+class RecognitionResponse(BaseModel):
+    log_id: Optional[int] = None
+    status: OCRStatusEnum
+    items: List[RecognizedItem]
+
+# Запрос, который шлёт фронт в /diary/bulk после подтверждения
+class BulkDiaryCreate(BaseModel):
+    datetime: datetime
+    items: List[RecognizedItem] = Field(..., min_length=1)
+

@@ -1,10 +1,11 @@
 # Описание таблиц (User, Food, Entry)
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Index
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 
-from .base import Base
+Base = declarative_base()
 
 # Enums для статусов
 class OCRStatus(enum.Enum):

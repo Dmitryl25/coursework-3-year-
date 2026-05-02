@@ -1,14 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from datetime import date, datetime
-from typing import Optional
+from typing import Optional, List
 
 from app.db.session import get_db
 from ..db.schemas import (
     DiaryEntryCreate, 
     DiaryEntryResponse, 
     DailySummary,
-    WeeklyStats
+    WeeklyStats,
+    BulkDiaryCreate
 )
 from ..db.crud import (
     create_diary_entry,
@@ -55,6 +56,46 @@ async def create_entry(
         total_fats=total_fats,
         total_carbohydrates=total_carbohydrates
     )
+# Метод создаёт записи в дневнике питания из списка распознанных позиций
+@router.post("/bulk", response_model=List[DiaryEntryResponse], status_code=201)
+async def create_bulk(payload: BulkDiaryCreate,
+                      user_id: int = Query(...),
+                      db: Session = Depends(get_db)):
+    results = []
+    for item in payload.items:
+        if item.matched_food_id is None:
+            continue
+        food = get_food_by_id(db, item.matched_food_id)
+        if food is None:
+            continue
+        entry = DiaryEntryCreate(food_id=item.matched_food_id,
+                                 weight=item.weight_g,
+                                 datetime=payload.datetime)
+        db_entry = create_diary_entry(db, user_id, entry)
+
+        total_calories = food.calories * (db_entry.weight / 100)
+        total_proteins = food.proteins * (db_entry.weight / 100)
+        total_fats = food.fats * (db_entry.weight / 100)
+        total_carbohydrates = food.carbohydrates * (db_entry.weight / 100)
+
+        diary_entry_response = DiaryEntryResponse(
+            id=db_entry.id,
+            user_id=db_entry.user_id,
+            food_id=db_entry.food_id,
+            weight=db_entry.weight,
+            datetime=db_entry.datetime,
+            created_at=db_entry.created_at,
+            food_name=food.name,
+            total_calories=total_calories,
+            total_proteins=total_proteins,
+            total_fats=total_fats,
+            total_carbohydrates=total_carbohydrates
+        )
+
+
+        results.append(diary_entry_response)
+    return results
+
 
 @router.get("/day/{date}", response_model=DailySummary)
 async def get_day(

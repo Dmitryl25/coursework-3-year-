@@ -57,7 +57,7 @@ async def get_food(
     return food
 
 @router.post("/", response_model=FoodResponse, status_code=201)
-async def create_food(
+async def create_food_endpoint(
     food: FoodCreate,
     db: Session = Depends(get_db)
 ):

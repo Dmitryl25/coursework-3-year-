@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from ..models import DiaryEntry, Food, User
 from ..schemas import DiaryEntryCreate, DiaryEntryResponse, DailyStats, DailySummary, WeeklyStats
-from .user import calculate_tdee
+from app.core.nutrition import calculate_tdee
 
 def create_diary_entry(db: Session, user_id: int, entry: DiaryEntryCreate) -> DiaryEntry:
     """Создать запись в дневнике"""

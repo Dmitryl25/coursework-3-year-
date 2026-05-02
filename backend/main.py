@@ -1,23 +1,27 @@
-from fastapi import FastAPI, Depends
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from app.db.models import Base
+from app.db.session import engine
+from app.services.matching import faiss_init as init_matching
+from ml_models.ocr.engine import ocr_init as init_ocr
 
-from app.core.config import settings
-from app.db.base import Base
 
-# Создаем engine и session
-engine = create_engine(settings.DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Создаем таблицы
-Base.metadata.create_all(bind=engine)
+# lifespan для загрузки моделей при старте сервера
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    init_matching()         # загрузка FAISS
+    init_ocr()              # загрузка EasyOCR
+    yield
 
-# Создаем экземпляр FastAPI
+
 app = FastAPI(
     title="Food Diary API",
     description="API for tracking food intake and nutrition",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # CORS
@@ -29,21 +33,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Функция для получения сессии
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
 # Подключаем роутеры
-from app.routers import auth, diary, food, ocr
+from app.routers import auth, diary, food, ocr, recommendations
 
 app.include_router(auth.router)
 app.include_router(diary.router)
 app.include_router(food.router)
 app.include_router(ocr.router)
+
+app.include_router(recommendations.router)
 
 # Эндпоинты
 @app.get("/")

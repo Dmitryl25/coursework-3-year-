@@ -3,6 +3,7 @@ import bcrypt
 
 from ..models import User
 from ..schemas import UserRegister, UserWithTDEE
+from app.core.nutrition import calculate_tdee
 
 def get_user_by_email(db: Session, email: str) -> User | None:
     """Получить пользователя по email"""
@@ -41,15 +42,6 @@ def verify_password(db: Session, email: str, password: str) -> User | None:
     if bcrypt.checkpw(password.encode('utf-8'), user.password_hash.encode('utf-8')):
         return user
     return None
-
-def calculate_tdee(user: User) -> float:
-    """Рассчитать TDEE для пользователя"""
-    if user.gender == "male":
-        bmr = (10 * user.weight) + (6.25 * user.height) - (5 * user.age) + 5
-    else:
-        bmr = (10 * user.weight) + (6.25 * user.height) - (5 * user.age) - 161
-    
-    return bmr * user.activity_level
 
 def get_user_with_tdee(db: Session, user_id: int) -> UserWithTDEE | None:
     """Получить пользователя с рассчитанным TDEE"""
