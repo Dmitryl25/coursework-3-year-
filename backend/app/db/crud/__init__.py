@@ -34,6 +34,7 @@ __all__ = [
     'update_ocr_status',
     'get_pending_ocr_logs',
     'get_user_ocr_logs',
+    'get_ocr_log_by_id',
     # Token
     'create_token',
     'get_token',
