@@ -115,17 +115,11 @@ class OCRLogResponse(OCRLogBase):
     raw_text: Optional[str] = None
     status: OCRStatusEnum
     created_at: datetime
-    
     model_config = ConfigDict(from_attributes=True)
 
-class OCRProcessRequest(BaseModel):
-    user_id: int
-    photo_path: str
-
-class OCRProcessResponse(BaseModel):
-    log_id: int
-    status: str
-    extracted_text: Optional[str] = None
+class OCRRawItem(BaseModel):
+    raw_text: str = Field(..., min_length=1)
+    weight_g: float = Field(..., gt=0, le=10000)
 
 # Одна распознанная позиция с фото
 class RecognizedItem(BaseModel):
@@ -135,6 +129,15 @@ class RecognizedItem(BaseModel):
     matched_name: Optional[str] = None
     confidence: float = Field(..., ge=0.0, le=1.0)
 
+# Запрос на поиск близких по семантике продуктов
+class MatchRequest(BaseModel):
+    items: List[OCRRawItem]
+
+# Ответ от OCR
+class OCRResponse(BaseModel):
+    log_id: Optional[int] = None
+    status: OCRStatusEnum
+    items: List[OCRRawItem]
 
 # Ответ, который отдаёт эндпоинт /ocr/recognize
 class RecognitionResponse(BaseModel):

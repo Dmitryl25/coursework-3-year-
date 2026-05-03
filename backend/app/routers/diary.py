@@ -37,6 +37,8 @@ async def create_entry(
         raise HTTPException(status_code=404, detail="Food not found")
     
     db_entry = create_diary_entry(db, current_user.id, entry)
+    db.commit()
+    db.refresh(db_entry)
     
     # Формируем ответ с рассчитанными значениями
     total_calories = food.calories * (db_entry.weight / 100)
@@ -57,12 +59,16 @@ async def create_entry(
         total_fats=total_fats,
         total_carbohydrates=total_carbohydrates
     )
+
+
 # Метод создаёт записи в дневнике питания из списка распознанных позиций
 @router.post("/bulk", response_model=List[DiaryEntryResponse], status_code=201)
 async def create_bulk(payload: BulkDiaryCreate,
                       current_user: User = Depends(get_current_user),
                       db: Session = Depends(get_db)):
-    results = []
+    db_entries = []
+    foods = []
+
     for item in payload.items:
         if item.matched_food_id is None:
             continue
@@ -73,28 +79,25 @@ async def create_bulk(payload: BulkDiaryCreate,
                                  weight=item.weight_g,
                                  datetime=payload.datetime)
         db_entry = create_diary_entry(db, current_user.id, entry)
+        db_entries.append(db_entry)
+        foods.append(food)
 
-        total_calories = food.calories * (db_entry.weight / 100)
-        total_proteins = food.proteins * (db_entry.weight / 100)
-        total_fats = food.fats * (db_entry.weight / 100)
-        total_carbohydrates = food.carbohydrates * (db_entry.weight / 100)
+    db.commit()
 
-        diary_entry_response = DiaryEntryResponse(
-            id=db_entry.id,
-            user_id=db_entry.user_id,
-            food_id=db_entry.food_id,
-            weight=db_entry.weight,
-            datetime=db_entry.datetime,
-            created_at=db_entry.created_at,
-            food_name=food.name,
-            total_calories=total_calories,
-            total_proteins=total_proteins,
-            total_fats=total_fats,
-            total_carbohydrates=total_carbohydrates
-        )
-
-
-        results.append(diary_entry_response)
+    results = []
+    for db_entry, food in zip(db_entries, foods):
+        db.refresh(db_entry)
+        results.append(DiaryEntryResponse(id=db_entry.id,
+                                          user_id=db_entry.user_id,
+                                          food_id=db_entry.food_id,
+                                          weight=db_entry.weight,
+                                          datetime=db_entry.datetime, created_at=db_entry.created_at,
+                                          food_name=food.name,
+                                          total_calories=food.calories * (db_entry.weight / 100),
+                                          total_proteins=food.proteins * (db_entry.weight / 100),
+                                          total_fats=food.fats * (db_entry.weight / 100),
+                                          total_carbohydrates=food.carbohydrates * (db_entry.weight / 100)
+                                          ))
     return results
 
 
@@ -110,7 +113,7 @@ async def get_day(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     
-    summary = get_daily_summary_with_tdee(db, current_user.id, target_date)
+    summary = get_daily_summary_with_tdee(db, current_user, target_date)
     return summary
 
 @router.get("/week", response_model=WeeklyStats)

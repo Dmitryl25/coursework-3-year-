@@ -5,9 +5,11 @@ from typing import List, Optional
 
 from ..models import DiaryEntry, Food, User
 from ..schemas import DiaryEntryCreate, DiaryEntryResponse, DailyStats, DailySummary, WeeklyStats
-from app.core.nutrition import calculate_tdee
+from app.core.nutrition import calculate_tdee, calculate_macros
 
-def create_diary_entry(db: Session, user_id: int, entry: DiaryEntryCreate) -> DiaryEntry:
+def create_diary_entry(db: Session,
+                       user_id: int,
+                       entry: DiaryEntryCreate) -> DiaryEntry:
     """Создать запись в дневнике"""
     db_entry = DiaryEntry(
         user_id=user_id,
@@ -16,8 +18,6 @@ def create_diary_entry(db: Session, user_id: int, entry: DiaryEntryCreate) -> Di
         datetime=entry.datetime
     )
     db.add(db_entry)
-    db.commit()
-    db.refresh(db_entry)
     return db_entry
 
 def get_diary_entries_by_date(db: Session, user_id: int, target_date: date) -> List:
@@ -78,17 +78,13 @@ def get_daily_stats(db: Session, user_id: int, target_date: date) -> DailyStats:
         entries_count=stats.entries_count
     )
 
-def get_daily_summary_with_tdee(db: Session, user_id: int, target_date: date) -> DailySummary:
+def get_daily_summary_with_tdee(db: Session, user: User, target_date: date) -> DailySummary:
     """Получить дневную сводку с сравнением с нормой"""
-    stats = get_daily_stats(db, user_id, target_date)
-    user = db.query(User).filter(User.id == user_id).first()
+    stats = get_daily_stats(db, user.id, target_date)
     
-    if user:
-        tdee = calculate_tdee(user)
-        remaining = tdee - stats.total_calories
-    else:
-        tdee = None
-        remaining = None
+    tdee = calculate_tdee(user)
+    target = calculate_macros(tdee, user.goal)["calories"]
+    remaining = target - stats.total_calories
     
     return DailySummary(
         date=target_date.isoformat(),
