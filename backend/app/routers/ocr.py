@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
 import os
 from ml_models.ocr.engine import extract_items
@@ -19,7 +19,8 @@ from ..db.crud import (
     update_ocr_status,
     get_pending_ocr_logs,
     get_user_ocr_logs,
-    get_food_by_id
+    get_food_by_id,
+    get_ocr_log_by_id
 )
 from ..db.models import OCRStatus
 from app.services.matching import match
@@ -52,6 +53,12 @@ async def process_ocr(log_id: int,
                       db: Session = Depends(get_db)
 ):
     """Использование FAISS для поиска семантически близких продуктов из базы"""
+
+    log = get_ocr_log_by_id(db, log_id)
+    if not log:
+        raise HTTPException(status_code=404, detail="OCR log not found")
+    if log.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     recognized = []
     for item in payload.items:
