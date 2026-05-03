@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
-from typing import Optional
 import os
 from ml_models.ocr.engine import extract_items
 import uuid
-from datetime import datetime
 
 from app.db.session import get_db
 from ..db.schemas import (
@@ -23,6 +21,8 @@ from ..db.crud import (
 )
 from ..db.models import OCRStatus
 from app.services.matching import match
+from app.core.dependencies import get_current_user
+from app.db.models import User
 
 router = APIRouter(prefix="/ocr", tags=["ocr"])
 
@@ -45,7 +45,7 @@ async def save_upload(file: UploadFile) -> str:
 
 @router.post("/upload", response_model=OCRLogResponse)
 async def upload_photo(
-    user_id: int = Query(...),
+    current_user: User = Depends(get_current_user),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -54,7 +54,7 @@ async def upload_photo(
     file_path = await save_upload(file)
     
     # Создаем запись в БД
-    db_log = create_ocr_log(db, user_id, file_path)
+    db_log = create_ocr_log(db, current_user.id, file_path)
     
     # Здесь будет вызов ML сервиса для OCR
     # Для примера просто возвращаем pending статус
@@ -84,13 +84,13 @@ async def process_ocr(
 
 @router.post("/recognize", response_model=RecognitionResponse)
 async def recognize(file: UploadFile = File(...),
-                    user_id: int = Query(...),
+                    current_user: User = Depends(get_current_user),
                     db: Session = Depends(get_db)):
 
-
+    """Распознавание текста на фото"""
     file_path = await save_upload(file)
 
-    db_log = create_ocr_log(db, user_id, file_path)
+    db_log = create_ocr_log(db, current_user.id, file_path)
 
     raw_items = extract_items(file_path)
 
@@ -119,7 +119,6 @@ async def recognize(file: UploadFile = File(...),
 @router.post("/match-text", response_model=RecognitionResponse)
 async def match_text(text: str = Query(...),
                      weight_g: float = Query(...),
-                     user_id: int = Query(...),
                      db: Session = Depends(get_db)):
     result = match(text)
     if not result:
@@ -145,12 +144,12 @@ async def get_pending(
     pending_logs = get_pending_ocr_logs(db, limit)
     return pending_logs
 
-@router.get("/user/{user_id}", response_model=list[OCRLogResponse])
+@router.get("/history", response_model=list[OCRLogResponse])
 async def get_user_history(
-    user_id: int,
+    current_user: User = Depends(get_current_user),
     limit: int = 20,
     db: Session = Depends(get_db)
 ):
     """Получить историю OCR пользователя"""
-    logs = get_user_ocr_logs(db, user_id, limit)
+    logs = get_user_ocr_logs(db, current_user.id, limit)
     return logs

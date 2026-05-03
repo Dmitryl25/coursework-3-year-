@@ -2,6 +2,7 @@ from .user import *
 from .food import *
 from .diary import *
 from .ocr import *
+from .token import *
 
 __all__ = [
     # User
@@ -33,4 +34,9 @@ __all__ = [
     'update_ocr_status',
     'get_pending_ocr_logs',
     'get_user_ocr_logs',
+    # Token
+    'create_token',
+    'get_token',
+    'deactivate_token',
+    'deactivate_all_user_tokens',
 ]

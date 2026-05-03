@@ -1,18 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
-from datetime import datetime, date
+from datetime import datetime, timezone, timedelta
 
 # Правильный импорт get_db
 from app.db.session import get_db
-from app.db.schemas import UserRegister, UserLogin, UserResponse, UserWithTDEE
+from app.db.schemas import UserRegister, UserLogin, UserResponse, UserWithTDEE, TokenOut, RefreshRequest
 from app.db.crud import (
     get_user_by_email,
     create_user,
     verify_password,
     get_user_with_tdee,
-    get_user_by_id,
 )
+from app.db.crud.token import create_token, deactivate_token, deactivate_all_user_tokens
 from app.core.nutrition import calculate_tdee, calculate_macros
+from app.core.security import create_access_token, create_refresh_token
+from app.core.dependencies import get_current_user, get_current_user_from_refresh_token
+from app.db.models import User
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -25,12 +28,11 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
-    
-    db_user = create_user(db, user)
-    return db_user
+    return create_user(db, user)
 
 @router.post("/login")
-async def login(user: UserLogin, db: Session = Depends(get_db)):
+async def login(user: UserLogin, request: Request,
+                db: Session = Depends(get_db)):
     """Вход пользователя"""
     db_user = verify_password(db, user.email, user.password)
     if not db_user:
@@ -38,35 +40,55 @@ async def login(user: UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"
         )
-    
-    # Здесь нужно добавить JWT токен
-    return {
-        "status": "success",
-        "message": "Login successful",
-        "user_id": db_user.id,
-        "email": db_user.email
-    }
+    ip = request.client.host if request.client else None
+    expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+    db_token = create_token(db, db_user.id, expires_at, ip)
+    return TokenOut(
+        access_token=create_access_token(db_user.id),
+        refresh_token=create_refresh_token(db_token.id)
+    )
 
-@router.get("/user/{user_id}/tdee", response_model=UserWithTDEE)
-async def get_user_tdee(user_id: int, db: Session = Depends(get_db)):
+
+@router.post("/refresh", response_model=TokenOut)
+async def refresh(user_id_and_token = Depends(get_current_user_from_refresh_token),
+                  db: Session = Depends(get_db)):
+    """Пересоздание токенов по refresh токену"""
+    user_id, token_db_id = user_id_and_token
+    deactivate_token(db, token_db_id)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+    new_db_token = create_token(db, user_id, expires_at)
+    return TokenOut(
+        access_token=create_access_token(user_id),
+        refresh_token=create_refresh_token(new_db_token.id)
+    )
+
+@router.post("/logout")
+async def logout(user_id_and_token: tuple = Depends(get_current_user_from_refresh_token),
+                 db: Session = Depends(get_db)):
+    """logout пользователя"""
+    user_id, token_db_id = user_id_and_token
+    deactivate_token(db, token_db_id)
+    return {"message": "Logged out"}
+
+@router.post("/logout_all")
+async def logout_all(current_user: User = Depends(get_current_user),
+                     db: Session = Depends(get_db)):
+    """logout всех сессий одного пользователя"""
+    deactivate_all_user_tokens(db, current_user.id)
+    return {"message": "Logged out from all devices"}
+
+@router.get("/me", response_model=UserResponse)
+async def me(current_user: User = Depends(get_current_user)):
+    """Получение профиля пользователя"""
+    return current_user
+
+@router.get("/me/tdee", response_model=UserWithTDEE)
+async def get_user_tdee(current_user: User = Depends(get_current_user),
+                        db: Session = Depends(get_db)):
     """Получить пользователя с рассчитанным TDEE"""
-    user = get_user_with_tdee(db, user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    return user
+    return get_user_with_tdee(db, current_user.id)
 
-@router.get("/user/{user_id}/daily-needs")
-async def get_daily_needs(user_id: int, db: Session = Depends(get_db)):
+@router.get("/me/daily-needs")
+async def get_daily_needs(current_user: User = Depends(get_current_user)):
     """Получить дневную норму калорий и КБЖУ"""
-    user = get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
-    tdee = calculate_tdee(user)
-    return calculate_macros(tdee, user.goal)
+    return calculate_macros(calculate_tdee(current_user), current_user.goal)

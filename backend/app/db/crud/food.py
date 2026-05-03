@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
-from typing import List, Optional
+from typing import List, Optional, Type
 
+from .. import Food
 from ..models import Food, DiaryEntry
 from ..schemas import FoodCreate
 
@@ -44,18 +45,13 @@ def search_foods_advanced(db: Session, query: str,
     
     return food_query.limit(limit).all()
 
-def get_popular_foods(db: Session, limit: int = 10):
+def get_popular_foods(db: Session, limit: int = 10) -> list[Type[Food]]:
     """Получить самые популярные продукты (по количеству записей в дневнике)"""
-    popular = db.query(
-        Food.id,
-        Food.name,
-        Food.calories,
-        Food.proteins,
-        Food.fats,
-        Food.carbohydrates,
-        func.count(DiaryEntry.id).label('usage_count')
-    ).join(DiaryEntry, Food.id == DiaryEntry.food_id).group_by(
-        Food.id
-    ).order_by(desc('usage_count')).limit(limit).all()
-    
+    popular = (db.query(Food)
+               .join(DiaryEntry, Food.id == DiaryEntry.food_id)
+               .group_by(Food.id)
+               .order_by(desc(func.count(DiaryEntry.id)))
+               .limit(limit)
+               .all()
+               )
     return popular

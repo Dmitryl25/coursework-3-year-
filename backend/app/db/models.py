@@ -1,5 +1,5 @@
 # Описание таблиц (User, Food, Entry)
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Index
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Index, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -18,6 +18,22 @@ class UserGoal(str, enum.Enum):
     MAINTAIN = "maintain"
     MASS = "mass"
 
+class Token(Base):
+    __tablename__ = "tokens"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    ip_address = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="tokens")
+
+    __table_args__ = (
+        Index("ix_tokens_user_id", "user_id"),
+    )
+
 class User(Base):
     __tablename__ = "users"
 
@@ -32,10 +48,10 @@ class User(Base):
     height = Column(Float, nullable=False)  # в см
     activity_level = Column(Float, nullable=False)  # коэффициент от 1.2 до 2.4
     goal = Column(Enum(UserGoal), nullable=False, default=UserGoal.MAINTAIN)
-    
-    # Связи
+
     diary_entries = relationship("DiaryEntry", back_populates="user", cascade="all, delete-orphan")
     ocr_logs = relationship("OCRLog", back_populates="user", cascade="all, delete-orphan")
+    tokens = relationship("Token", back_populates="user", cascade="all, delete-orphan")
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -53,7 +69,6 @@ class Food(Base):
     carbohydrates = Column(Float, nullable=False)  # углеводы в граммах
 
 
-    # Связь с записями дневника
     diary_entries = relationship("DiaryEntry", back_populates="food")
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -70,8 +85,7 @@ class DiaryEntry(Base):
     # Данные приема пищи
     weight = Column(Float, nullable=False)  # вес порции в граммах
     datetime = Column(DateTime(timezone=True), nullable=False, index=True)
-    
-    # Связи
+
     user = relationship("User", back_populates="diary_entries")
     food = relationship("Food", back_populates="diary_entries")
     
@@ -92,8 +106,7 @@ class OCRLog(Base):
     photo_path = Column(String(512), nullable=False)  # путь к файлу на сервере
     raw_text = Column(String(2000))  # распознанный текст (может быть длинным)
     status = Column(Enum(OCRStatus), default=OCRStatus.PENDING, nullable=False)
-    
-    # Связь
+
     user = relationship("User", back_populates="ocr_logs")
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())

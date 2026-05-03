@@ -147,3 +147,12 @@ class BulkDiaryCreate(BaseModel):
     datetime: datetime
     items: List[RecognizedItem] = Field(..., min_length=1)
 
+# Модели для токенов
+class TokenOut(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "Bearer"
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+

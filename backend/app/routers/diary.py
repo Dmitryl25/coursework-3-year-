@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import date, datetime
 from typing import Optional, List
@@ -13,20 +13,21 @@ from ..db.schemas import (
 )
 from ..db.crud import (
     create_diary_entry,
-    get_diary_entries_by_date,
     get_daily_summary_with_tdee,
     get_weekly_stats,
     delete_diary_entry,
     update_diary_entry,
     get_food_by_id
 )
+from app.core.dependencies import get_current_user
+from app.db.models import User
 
 router = APIRouter(prefix="/diary", tags=["diary"])
 
 @router.post("/entry", response_model=DiaryEntryResponse, status_code=201)
 async def create_entry(
     entry: DiaryEntryCreate,
-    user_id: int = Query(..., description="User ID"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Создать запись о приеме пищи"""
@@ -35,7 +36,7 @@ async def create_entry(
     if not food:
         raise HTTPException(status_code=404, detail="Food not found")
     
-    db_entry = create_diary_entry(db, user_id, entry)
+    db_entry = create_diary_entry(db, current_user.id, entry)
     
     # Формируем ответ с рассчитанными значениями
     total_calories = food.calories * (db_entry.weight / 100)
@@ -59,7 +60,7 @@ async def create_entry(
 # Метод создаёт записи в дневнике питания из списка распознанных позиций
 @router.post("/bulk", response_model=List[DiaryEntryResponse], status_code=201)
 async def create_bulk(payload: BulkDiaryCreate,
-                      user_id: int = Query(...),
+                      current_user: User = Depends(get_current_user),
                       db: Session = Depends(get_db)):
     results = []
     for item in payload.items:
@@ -71,7 +72,7 @@ async def create_bulk(payload: BulkDiaryCreate,
         entry = DiaryEntryCreate(food_id=item.matched_food_id,
                                  weight=item.weight_g,
                                  datetime=payload.datetime)
-        db_entry = create_diary_entry(db, user_id, entry)
+        db_entry = create_diary_entry(db, current_user.id, entry)
 
         total_calories = food.calories * (db_entry.weight / 100)
         total_proteins = food.proteins * (db_entry.weight / 100)
@@ -100,7 +101,7 @@ async def create_bulk(payload: BulkDiaryCreate,
 @router.get("/day/{date}", response_model=DailySummary)
 async def get_day(
     date: str,
-    user_id: int = Query(..., description="User ID"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Получить сводку за день"""
@@ -109,13 +110,13 @@ async def get_day(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     
-    summary = get_daily_summary_with_tdee(db, user_id, target_date)
+    summary = get_daily_summary_with_tdee(db, current_user.id, target_date)
     return summary
 
 @router.get("/week", response_model=WeeklyStats)
 async def get_week(
     end_date: Optional[str] = None,
-    user_id: int = Query(..., description="User ID"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Получить статистику за неделю"""
@@ -127,17 +128,17 @@ async def get_week(
     else:
         target_date = date.today()
     
-    stats = get_weekly_stats(db, user_id, target_date)
+    stats = get_weekly_stats(db, current_user.id, target_date)
     return stats
 
 @router.delete("/entry/{entry_id}")
 async def delete_entry(
     entry_id: int,
-    user_id: int = Query(..., description="User ID"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Удалить запись из дневника"""
-    deleted = delete_diary_entry(db, entry_id, user_id)
+    deleted = delete_diary_entry(db, entry_id, current_user.id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Entry not found")
     
@@ -147,11 +148,11 @@ async def delete_entry(
 async def update_entry(
     entry_id: int,
     weight: float,
-    user_id: int = Query(..., description="User ID"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Обновить вес в записи"""
-    entry = update_diary_entry(db, entry_id, user_id, weight)
+    entry = update_diary_entry(db, entry_id, current_user.id, weight)
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
     
