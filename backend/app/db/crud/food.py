@@ -2,7 +2,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from typing import List, Optional, Type
 
-from .. import Food
 from ..models import Food, DiaryEntry
 from ..schemas import FoodCreate
 

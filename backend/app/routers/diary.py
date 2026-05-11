@@ -30,11 +30,9 @@ router = APIRouter(prefix="/diary", tags=["diary"])
 
 
 @router.post("/entry", response_model=DiaryEntryResponse, status_code=201)
-async def create_entry(
-    entry: DiaryEntryCreate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+async def create_entry(entry: DiaryEntryCreate,
+                       current_user: User = Depends(get_current_user),
+                       db: Session = Depends(get_db)):
     """Создать запись о приеме пищи"""
     food = get_food_by_id(db, entry.food_id)
     if not food:
@@ -61,11 +59,9 @@ async def create_entry(
 
 
 @router.post("/bulk", response_model=List[DiaryEntryResponse], status_code=201)
-async def create_bulk(
-    payload: BulkDiaryCreate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+async def create_bulk(payload: BulkDiaryCreate,
+                      current_user: User = Depends(get_current_user),
+                      db: Session = Depends(get_db)):
     """Создать несколько записей за один приём пищи"""
     db_entries = []
     foods = []
@@ -107,11 +103,9 @@ async def create_bulk(
 
 
 @router.get("/entries/{target_date}", response_model=List[DiaryEntryResponse])
-async def get_day_entries(
-    target_date: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+async def get_day_entries(target_date: str,
+                          current_user: User = Depends(get_current_user),
+                          db: Session = Depends(get_db)):
     """Получить список записей о приёмах пищи за конкретный день."""
     try:
         parsed_date = datetime.strptime(target_date, "%Y-%m-%d").date()
@@ -139,11 +133,9 @@ async def get_day_entries(
 
 
 @router.get("/day/{date}", response_model=DailySummary)
-async def get_day(
-    date: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+async def get_day(date: str,
+                  current_user: User = Depends(get_current_user),
+                  db: Session = Depends(get_db)):
     """Получить сводку за день"""
     try:
         target_date = datetime.strptime(date, "%Y-%m-%d").date()
@@ -154,11 +146,9 @@ async def get_day(
 
 
 @router.get("/week", response_model=WeeklyStats)
-async def get_week(
-    end_date: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+async def get_week(end_date: Optional[str] = None,
+                   current_user: User = Depends(get_current_user),
+                   db: Session = Depends(get_db)):
     """Получить статистику за неделю"""
     if end_date:
         try:
@@ -172,11 +162,9 @@ async def get_week(
 
 
 @router.delete("/entry/{entry_id}")
-async def delete_entry(
-    entry_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+async def delete_entry(entry_id: int,
+                       current_user: User = Depends(get_current_user),
+                       db: Session = Depends(get_db)):
     """Удалить запись из дневника"""
     deleted = delete_diary_entry(db, entry_id, current_user.id)
     if not deleted:
@@ -190,12 +178,10 @@ class WeightUpdate(BaseModel):
 
 
 @router.patch("/entry/{entry_id}")
-async def update_entry(
-    entry_id: int,
-    payload: WeightUpdate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+async def update_entry(entry_id: int,
+                       payload: WeightUpdate,
+                       current_user: User = Depends(get_current_user),
+                       db: Session = Depends(get_db)):
     """Обновить вес порции в записи"""
     entry = update_diary_entry(db, entry_id, current_user.id, payload.weight)
     if not entry:

@@ -68,13 +68,11 @@ class MealPlanner:
     # Публичные методы
     # ------------------------------------------------------------------
 
-    def plan_day(
-        self,
-        targets: dict,
-        already_eaten: Optional[list[dict]] = None,
-        seed: Optional[int] = None,
-        meals_to_plan: Optional[list[str]] = None,
-    ) -> dict:
+    def plan_day(self,
+                 targets: dict,
+                 already_eaten: Optional[list[dict]] = None,
+                 seed: Optional[int] = None,
+                 meals_to_plan: Optional[list[str]] = None) -> dict:
 
         # XOR seed с хэшем названия приёма → независимый RNG для каждого из них
         def meal_rng(meal_name: str) -> random.Random:
@@ -160,13 +158,11 @@ class MealPlanner:
             "coverage_pct": coverage,
         }
 
-    def plan_from_menu(
-        self,
-        products: list[dict],
-        cal_budget: float,
-        macro_budget: dict,
-        seed: Optional[int] = None,
-    ) -> list[dict]:
+    def plan_from_menu(self,
+                       products: list[dict],
+                       cal_budget: float,
+                       macro_budget: dict,
+                       seed: Optional[int] = None) -> list[dict]:
         """Выбрать оптимальные порции из произвольного списка продуктов (меню из OCR)."""
         rng = random.Random(seed)
         best_items: list[dict] = []
@@ -196,13 +192,11 @@ class MealPlanner:
             result["carbohydrates"] -= float(entry.get("carbohydrates", 0))
         return result
 
-    def _plan_meal(
-        self,
-        meal_name: str,
-        cal_budget: float,
-        macro_budget: dict,
-        rng: random.Random,
-    ) -> list[dict]:
+    def _plan_meal(self,
+                   meal_name: str,
+                   cal_budget: float,
+                   macro_budget: dict,
+                   rng: random.Random) -> list[dict]:
         if cal_budget < 50:
             return []
 
@@ -212,8 +206,7 @@ class MealPlanner:
                 (self._df["meal_type"] == meal_name) |
                 (self._df["meal_type"] == "any") |
                 (self._df["category"].isin(extra_cats))
-            ) &
-            ~self._df["category"].isin(EXCLUDED_CATEGORIES)
+            ) & ~self._df["category"].isin(EXCLUDED_CATEGORIES)
         ]
 
         best_items: list[dict] = []
@@ -233,12 +226,10 @@ class MealPlanner:
 
         return best_items
 
-    def _select_diverse(
-        self,
-        eligible: pd.DataFrame,
-        meal_name: str,
-        rng: random.Random,
-    ) -> list[dict]:
+    def _select_diverse(self,
+                        eligible: pd.DataFrame,
+                        meal_name: str,
+                        rng: random.Random) -> list[dict]:
         """Выбрать по одному продукту из разных категорий."""
         priority = PRIORITY_CATEGORIES.get(meal_name, [])
         available_cats = eligible["category"].unique().tolist()
@@ -256,12 +247,10 @@ class MealPlanner:
 
         return selected
 
-    def _optimize_portions(
-        self,
-        products: list[dict],
-        cal_budget: float,
-        macro_budget: dict,
-    ) -> np.ndarray:
+    def _optimize_portions(self,
+                           products: list[dict],
+                           cal_budget: float,
+                           macro_budget: dict) -> np.ndarray:
         def objective(w: np.ndarray) -> float:
             cal  = sum(p["calories"]      * w[i] / 100 for i, p in enumerate(products))
             prot = sum(p["proteins"]      * w[i] / 100 for i, p in enumerate(products))
@@ -318,13 +307,12 @@ class MealPlanner:
 
         return np.round(result.x).astype(float)
 
-    def _score(
-        self,
-        products: list[dict],
-        portions: np.ndarray,
-        cal_budget: float,
-        macro_budget: dict,
-    ) -> float:
+    def _score(self,
+               products: list[dict],
+               portions: np.ndarray,
+               cal_budget: float,
+               macro_budget: dict) -> float:
+
         cal  = sum(p["calories"]      * portions[i] / 100 for i, p in enumerate(products))
         prot = sum(p["proteins"]      * portions[i] / 100 for i, p in enumerate(products))
         fat  = sum(p["fats"]          * portions[i] / 100 for i, p in enumerate(products))

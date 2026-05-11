@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 
-# Правильный импорт get_db
 from app.db.session import get_db
 from app.db.schemas import UserRegister, UserLogin, UserResponse, UserWithTDEE, TokenOut, RefreshRequest
 from app.db.crud import (

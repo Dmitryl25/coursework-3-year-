@@ -10,7 +10,6 @@ __all__ = [
     'get_user_by_id',
     'create_user',
     'verify_password',
-    'calculate_tdee',
     'get_user_with_tdee',
     'update_user_weight',
     'update_user_activity',
