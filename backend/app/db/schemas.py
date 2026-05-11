@@ -55,9 +55,10 @@ class DiaryEntryBase(BaseModel):
     food_id: int = Field(..., gt=0)
     weight: float = Field(..., gt=0, le=10000)
     datetime: datetime
+    meal_type: Optional[str] = Field(None, pattern="^(breakfast|lunch|dinner|snack)$")
 
 class DiaryEntryCreate(DiaryEntryBase):
-    pass
+    meal_type: str = Field(..., pattern="^(breakfast|lunch|dinner|snack)$")
 
 class DiaryEntryResponse(DiaryEntryBase):
     id: int
@@ -68,7 +69,7 @@ class DiaryEntryResponse(DiaryEntryBase):
     total_proteins: float
     total_fats: float
     total_carbohydrates: float
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 class DailyStats(BaseModel):
@@ -119,12 +120,10 @@ class OCRLogResponse(OCRLogBase):
 
 class OCRRawItem(BaseModel):
     raw_text: str = Field(..., min_length=1)
-    weight_g: float = Field(..., gt=0, le=10000)
 
 # Одна распознанная позиция с фото
 class RecognizedItem(BaseModel):
     raw_text: str = Field(..., min_length=1)
-    weight_g: float = Field(..., gt=0, le=10000)
     matched_food_id: Optional[int] = None
     matched_name: Optional[str] = None
     confidence: float = Field(..., ge=0.0, le=1.0)
@@ -145,10 +144,73 @@ class RecognitionResponse(BaseModel):
     status: OCRStatusEnum
     items: List[RecognizedItem]
 
-# Запрос, который шлёт фронт в /diary/bulk после подтверждения
+# Одна позиция для /diary/bulk — food_id + порция, введённая пользователем
+class BulkDiaryItem(BaseModel):
+    food_id: int = Field(..., gt=0)
+    portion_g: float = Field(..., gt=0, le=10000)
+
+# Запрос, который шлёт фронт в /diary/bulk после подтверждения порций
 class BulkDiaryCreate(BaseModel):
     datetime: datetime
-    items: List[RecognizedItem] = Field(..., min_length=1)
+    meal_type: str = Field(..., pattern="^(breakfast|lunch|dinner|snack)$")
+    items: List[BulkDiaryItem] = Field(..., min_length=1)
+
+# ========== MEAL PLAN SCHEMAS ==========
+class MealPlanItem(BaseModel):
+    food_id: int
+    name: str
+    portion_g: float
+    calories_total: float
+    proteins_total: float
+    fats_total: float
+    carbohydrates_total: float
+    category: str
+
+class MacroTargets(BaseModel):
+    calories: float
+    proteins: float
+    fats: float
+    carbohydrates: float
+
+class MealPlanResponse(BaseModel):
+    breakfast: List[MealPlanItem]
+    lunch: List[MealPlanItem]
+    dinner: List[MealPlanItem]
+    totals: MacroTargets
+    targets: MacroTargets
+    remaining_after_plan: MacroTargets
+    surplus: dict
+    coverage_pct: float
+    confirmed_meals: List[str]
+    message: Optional[str] = None
+
+# ========== MEAL PLAN FROM MENU SCHEMAS ==========
+class MenuPlanRequest(BaseModel):
+    meal: str = Field(..., pattern="^(breakfast|lunch|dinner|snack)$")
+    food_ids: List[int] = Field(..., min_length=1)
+
+class MenuPlanResponse(BaseModel):
+    meal: str
+    items: List[MealPlanItem]
+    totals: MacroTargets
+    cal_budget: float
+
+# ========== MEAL PLAN CONFIRM SCHEMAS ==========
+class MealConfirmItem(BaseModel):
+    food_id: int = Field(..., gt=0)
+    portion_g: float = Field(..., gt=0, le=10000)
+
+class MealConfirmRequest(BaseModel):
+    meal: str = Field(..., pattern="^(breakfast|lunch|dinner)$")
+    items: List[MealConfirmItem] = Field(..., min_length=1)
+
+class MealConfirmResponse(BaseModel):
+    meal: str
+    saved_count: int
+    total_calories: float
+    total_proteins: float
+    total_fats: float
+    total_carbohydrates: float
 
 # Модели для токенов
 class TokenOut(BaseModel):

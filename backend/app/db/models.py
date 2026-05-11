@@ -68,6 +68,12 @@ class Food(Base):
     fats = Column(Float, nullable=False)        # жиры в граммах
     carbohydrates = Column(Float, nullable=False)  # углеводы в граммах
 
+    # Метаданные для планировщика
+    meal_type = Column(String(20), nullable=True)   # breakfast / lunch / dinner / any
+    category = Column(String(50), nullable=True)
+    min_portion = Column(Integer, nullable=True)    # граммы
+    max_portion = Column(Integer, nullable=True)    # граммы
+
 
     diary_entries = relationship("DiaryEntry", back_populates="food")
     
@@ -85,6 +91,7 @@ class DiaryEntry(Base):
     # Данные приема пищи
     weight = Column(Float, nullable=False)  # вес порции в граммах
     datetime = Column(DateTime(timezone=True), nullable=False, index=True)
+    meal_type = Column(String(20), nullable=True)  # breakfast / lunch / dinner / snack / None
 
     user = relationship("User", back_populates="diary_entries")
     food = relationship("Food", back_populates="diary_entries")

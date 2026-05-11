@@ -22,7 +22,11 @@ def import_products(csv_file):
                     proteins=float(row['proteins']),
                     fats=float(row['fats']),
                     carbohydrates=float(row['carbs']),
-                    calories=int(row['calories'])
+                    calories=int(row['calories']),
+                    meal_type=row.get('meal_type'),
+                    category=row.get('category'),
+                    min_portion=int(row['min_portion']) if row.get('min_portion') else None,
+                    max_portion=int(row['max_portion']) if row.get('max_portion') else None,
                 )
                 db.add(food)
                 count += 1
@@ -47,4 +51,4 @@ def import_products(csv_file):
         db.close()
 
 if __name__ == "__main__":
-    import_products("data/products.csv")
+    import_products("data/products_enhanced.csv")

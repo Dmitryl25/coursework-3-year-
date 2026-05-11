@@ -1,7 +1,9 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, desc
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import List, Optional
+
+MSK = timezone(timedelta(hours=3))
 
 from ..models import DiaryEntry, Food, User
 from ..schemas import DiaryEntryCreate, DiaryEntryResponse, DailyStats, DailySummary, WeeklyStats
@@ -15,15 +17,16 @@ def create_diary_entry(db: Session,
         user_id=user_id,
         food_id=entry.food_id,
         weight=entry.weight,
-        datetime=entry.datetime
+        datetime=entry.datetime,
+        meal_type=entry.meal_type,
     )
     db.add(db_entry)
     return db_entry
 
 def get_diary_entries_by_date(db: Session, user_id: int, target_date: date) -> List:
     """Получить все записи за конкретную дату"""
-    start_date = datetime.combine(target_date, datetime.min.time())
-    end_date = datetime.combine(target_date, datetime.max.time())
+    start_date = datetime.combine(target_date, datetime.min.time(), tzinfo=MSK)
+    end_date = datetime.combine(target_date, datetime.max.time(), tzinfo=MSK)
     
     entries = db.query(
         DiaryEntry.id,
@@ -32,6 +35,7 @@ def get_diary_entries_by_date(db: Session, user_id: int, target_date: date) -> L
         DiaryEntry.weight,
         DiaryEntry.datetime,
         DiaryEntry.created_at,
+        DiaryEntry.meal_type,
         Food.name.label('food_name'),
         Food.calories,
         Food.proteins,
@@ -53,8 +57,8 @@ def get_diary_entries_by_date(db: Session, user_id: int, target_date: date) -> L
 
 def get_daily_stats(db: Session, user_id: int, target_date: date) -> DailyStats:
     """Получить статистику за день"""
-    start_date = datetime.combine(target_date, datetime.min.time())
-    end_date = datetime.combine(target_date, datetime.max.time())
+    start_date = datetime.combine(target_date, datetime.min.time(), tzinfo=MSK)
+    end_date = datetime.combine(target_date, datetime.max.time(), tzinfo=MSK)
     
     stats = db.query(
         func.coalesce(func.sum(Food.calories * (DiaryEntry.weight / 100)), 0).label('total_calories'),
@@ -100,7 +104,7 @@ def get_daily_summary_with_tdee(db: Session, user: User, target_date: date) -> D
 def get_weekly_stats(db: Session, user_id: int, end_date: date = None) -> WeeklyStats:
     """Получить статистику за неделю"""
     if end_date is None:
-        end_date = date.today()
+        end_date = datetime.now(MSK).date()
     
     start_date = end_date - timedelta(days=6)
     week_start = start_date
@@ -123,6 +127,26 @@ def get_weekly_stats(db: Session, user_id: int, end_date: date = None) -> Weekly
         average_calories=total_calories / 7
     )
 
+def get_confirmed_meals_today(db: Session, user_id: int) -> set:
+    """Вернуть все meal_type из дневника за сегодня. snack в результате не блокирует план — проверка идёт в роутере через ALL_MEALS."""
+    today = datetime.now(MSK).date()
+    start_date = datetime.combine(today, datetime.min.time(), tzinfo=MSK)
+    end_date = datetime.combine(today, datetime.max.time(), tzinfo=MSK)
+
+    rows = (
+        db.query(DiaryEntry.meal_type)
+        .filter(
+            DiaryEntry.user_id == user_id,
+            DiaryEntry.datetime >= start_date,
+            DiaryEntry.datetime <= end_date,
+            DiaryEntry.meal_type.isnot(None),
+        )
+        .distinct()
+        .all()
+    )
+    return {r.meal_type for r in rows}
+
+
 def delete_diary_entry(db: Session, entry_id: int, user_id: int) -> bool:
     """Удалить запись из дневника"""
     entry = db.query(DiaryEntry).filter(
@@ -131,10 +155,9 @@ def delete_diary_entry(db: Session, entry_id: int, user_id: int) -> bool:
             DiaryEntry.user_id == user_id
         )
     ).first()
-    
+
     if entry:
         db.delete(entry)
-        db.commit()
         return True
     return False
 
@@ -146,9 +169,7 @@ def update_diary_entry(db: Session, entry_id: int, user_id: int, weight: float) 
             DiaryEntry.user_id == user_id
         )
     ).first()
-    
+
     if entry:
         entry.weight = weight
-        db.commit()
-        db.refresh(entry)
     return entry

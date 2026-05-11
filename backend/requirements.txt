@@ -10,3 +10,9 @@ python-jose[cryptography]==3.3.0
 faiss-cpu
 sentence-transformers
 easyocr
+scipy
+pandas
+numpy
+torch
+torchvision
+Pillow

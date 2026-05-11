@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.core.nutrition import calculate_tdee, calculate_macros
 from app.db.crud.diary import get_daily_stats
-from datetime import date
+from datetime import datetime, timezone, timedelta
+
+MSK = timezone(timedelta(hours=3))
 from app.core.dependencies import get_current_user
 from app.db.models import User
 
@@ -15,7 +17,7 @@ async def get_recommendations(current_user: User = Depends(get_current_user),
     """Получение рекомендаций по текущим TDEE и цели пользователя"""
     tdee = calculate_tdee(current_user)
     target_calories = calculate_macros(tdee, current_user.goal)["calories"]
-    daily_stats = get_daily_stats(db, current_user.id, date.today())
+    daily_stats = get_daily_stats(db, current_user.id, datetime.now(MSK).date())
     remaining_calories = target_calories - daily_stats.total_calories
     response = ""
     if remaining_calories > 500:

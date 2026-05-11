@@ -27,6 +27,7 @@ __all__ = [
     'get_daily_stats',
     'get_daily_summary_with_tdee',
     'get_weekly_stats',
+    'get_confirmed_meals_today',
     'delete_diary_entry',
     'update_diary_entry',
     # OCR
