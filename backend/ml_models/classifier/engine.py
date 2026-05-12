@@ -8,6 +8,9 @@ from PIL import Image
 from ml_models.classifier.data_preprocess import get_test_transform
 from ml_models.classifier.model import MobileNet
 
+import sys
+import time
+
 CHECKPOINT_PATH = str(Path(__file__).parent / "weights" / "best_food_model.pth")
 NUM_CLASSES = 101
 
@@ -42,6 +45,8 @@ _transform = None
 
 def classifier_init() -> None:
     global _classifier, _device, _transform
+    print("Loading MobileNet classifier...", flush=True)
+    start_time = time.time()
     _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     _classifier = MobileNet(
         _device, NUM_CLASSES,
@@ -50,6 +55,9 @@ def classifier_init() -> None:
     )
     _classifier.eval()
     _transform = get_test_transform()
+    load_time = time.time() - start_time
+    print(f"   ✅ Classifier loaded in {load_time:.2f}s", flush=True)
+    sys.stdout.flush()
 
 
 def classify_image(image_path: str, top_k: int = 3) -> List[dict]:
