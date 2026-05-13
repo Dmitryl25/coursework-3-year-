@@ -11,8 +11,8 @@ __all__ = [
     'create_user',
     'verify_password',
     'get_user_with_tdee',
-    'update_user_weight',
-    'update_user_activity',
+    'update_user_goal', 
+    'update_user_profile'
     # Food
     'search_foods',
     'get_food_by_id',

@@ -66,20 +66,16 @@ def get_user_with_tdee(db: Session, user_id: int) -> UserWithTDEE | None:
         updated_at=user.updated_at
     )
 
-def update_user_weight(db: Session, user_id: int, new_weight: float) -> User | None:
-    """Обновить вес пользователя"""
-    user = get_user_by_id(db, user_id)
-    if user:
-        user.weight = new_weight
-        db.commit()
-        db.refresh(user)
+
+def update_user_goal(db: Session, user: User, goal) -> User:
+    """Обновить цель пользователя"""
+    user.goal = goal
     return user
 
-def update_user_activity(db: Session, user_id: int, new_activity: float) -> User | None:
-    """Обновить уровень активности"""
-    user = get_user_by_id(db, user_id)
-    if user:
-        user.activity_level = new_activity
-        db.commit()
-        db.refresh(user)
+def update_user_profile(db: Session, user: User, data) -> User:
+    """Обновить антропометрические данные (только переданные поля)"""
+    for field in ("weight", "height", "age", "activity_level", "gender"):
+        value = getattr(data, field, None)
+        if value is not None:
+            setattr(user, field, value)
     return user

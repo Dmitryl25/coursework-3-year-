@@ -3,12 +3,14 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 
 from app.db.session import get_db
-from app.db.schemas import UserRegister, UserLogin, UserResponse, UserWithTDEE, TokenOut, RefreshRequest
+from app.db.schemas import UserRegister, UserLogin, UserResponse, UserWithTDEE, TokenOut, RefreshRequest, GoalUpdate, ProfileUpdate
 from app.db.crud import (
     get_user_by_email,
     create_user,
     verify_password,
     get_user_with_tdee,
+    update_user_goal,
+    update_user_profile,
 )
 from app.db.crud.token import create_token, deactivate_token, deactivate_all_user_tokens
 from app.core.nutrition import calculate_tdee, calculate_macros
@@ -91,3 +93,29 @@ async def get_user_tdee(current_user: User = Depends(get_current_user),
 async def get_daily_needs(current_user: User = Depends(get_current_user)):
     """Получить дневную норму калорий и КБЖУ"""
     return calculate_macros(calculate_tdee(current_user), current_user.goal)
+
+
+@router.patch("/me/goal", response_model=UserResponse)
+async def update_goal(
+    payload: GoalUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Изменить цель пользователя (loss / maintain / mass)"""
+    update_user_goal(db, current_user, payload.goal)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.patch("/me/profile", response_model=UserResponse)
+async def update_profile(
+    payload: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Изменить антропометрические данные (вес, рост, возраст, активность, пол)"""
+    update_user_profile(db, current_user, payload)
+    db.commit()
+    db.refresh(current_user)
+    return current_user

@@ -212,6 +212,17 @@ class MealConfirmResponse(BaseModel):
     total_fats: float
     total_carbohydrates: float
 
+
+# ========== USER UPDATE SCHEMAS ==========
+class GoalUpdate(BaseModel):
+    goal: UserGoal
+
+class ProfileUpdate(BaseModel):
+    weight: Optional[float] = Field(None, gt=0, le=500)
+    height: Optional[float] = Field(None, gt=0, le=300)
+    age: Optional[int] = Field(None, ge=1, le=120)
+    activity_level: Optional[float] = Field(None, ge=1.2, le=2.4)
+    gender: Optional[str] = None
 # Модели для токенов
 class TokenOut(BaseModel):
     access_token: str
