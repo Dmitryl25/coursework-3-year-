@@ -31,7 +31,17 @@ def ocr_init():
             logger.error(f"Failed to load EasyOCR even with CPU: {cpu_error}", exc_info=True)
             raise
 
+def _resize_if_needed(image_path: str, max_side: int = 1280) -> str:
+    from PIL import Image
+    img = Image.open(image_path)
+    if max(img.size) > max_side:
+        img.thumbnail((max_side, max_side), Image.LANCZOS)
+        img.save(image_path)
+        logger.info(f"Resized image to {img.size}")
+    return image_path
+
 def extract_items(image_path: str) -> List[dict]:
+    _resize_if_needed(image_path)
     results = reader.readtext(image_path, detail=0)
     items = []
     for line in results:

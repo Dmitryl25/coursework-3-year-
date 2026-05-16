@@ -50,7 +50,7 @@ services:
           memory: 1.5G
         limits:
           cpus: '2.0'
-          memory: 3G
+          memory: 5G
     
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
