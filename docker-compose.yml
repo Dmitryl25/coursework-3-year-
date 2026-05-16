@@ -32,6 +32,7 @@ services:
       PYTHONUNBUFFERED: 1
       PYTHONDONTWRITEBYTECODE: 1
     volumes:
+      - ./backend:/app
       - hf_cache:/root/.cache/huggingface
       - easyocr_cache:/root/.EasyOCR
       - ./backend/logs:/app/logs
