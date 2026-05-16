@@ -1,4 +1,5 @@
 import os
+import logging
 from pathlib import Path
 from typing import List
 
@@ -8,9 +9,9 @@ from PIL import Image
 from ml_models.classifier.data_preprocess import get_test_transform
 from ml_models.classifier.model import MobileNet
 
-import sys
 import time
 
+logger = logging.getLogger(__name__)
 CHECKPOINT_PATH = str(Path(__file__).parent / "weights" / "best_food_model.pth")
 NUM_CLASSES = 101
 
@@ -45,19 +46,29 @@ _transform = None
 
 def classifier_init() -> None:
     global _classifier, _device, _transform
-    print("Loading MobileNet classifier...", flush=True)
+    logger.info("Loading MobileNet classifier...")
     start_time = time.time()
+
+    if not os.path.exists(CHECKPOINT_PATH):
+        logger.error(f"Checkpoint file not found: {CHECKPOINT_PATH}")
+        raise FileNotFoundError(f"Classifier checkpoint not found at {CHECKPOINT_PATH}")
+
     _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    _classifier = MobileNet(
-        _device, NUM_CLASSES,
-        CHECKPOINT_PATH=CHECKPOINT_PATH,
-        checkpoint=True,
-    )
-    _classifier.eval()
-    _transform = get_test_transform()
-    load_time = time.time() - start_time
-    print(f"   ✅ Classifier loaded in {load_time:.2f}s", flush=True)
-    sys.stdout.flush()
+    logger.info(f"Using device: {_device}")
+
+    try:
+        _classifier = MobileNet(
+            _device, NUM_CLASSES,
+            CHECKPOINT_PATH=CHECKPOINT_PATH,
+            checkpoint=True,
+        )
+        _classifier.eval()
+        _transform = get_test_transform()
+        load_time = time.time() - start_time
+        logger.info(f"MobileNet classifier loaded on {_device} in {load_time:.2f}s")
+    except Exception as e:
+        logger.error(f"Failed to load classifier: {e}", exc_info=True)
+        raise
 
 
 def classify_image(image_path: str, top_k: int = 3) -> List[dict]:

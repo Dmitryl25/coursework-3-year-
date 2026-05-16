@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 
 from app.db.session import get_db
+from app.db.models import User
+from app.core.dependencies import get_current_user
 from ..db.schemas import FoodResponse, FoodCreate, FoodSearchResult
 from ..db.crud import (
     search_foods,
@@ -51,8 +53,8 @@ async def get_food(food_id: int,
 
 @router.post("/", response_model=FoodResponse, status_code=201)
 async def create_food_endpoint(food: FoodCreate,
-                               db: Session = Depends(get_db)):
-    """Создать новый продукт (для админов)"""
-    # Здесь добавить проверку прав администратора
+                               db: Session = Depends(get_db),
+                               current_user: User = Depends(get_current_user)):
+    """Создать новый продукт (требует авторизация)"""
     db_food = create_food(db, food)
     return db_food

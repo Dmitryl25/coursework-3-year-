@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.models import Base
@@ -7,14 +8,35 @@ from app.services.matching import faiss_init as init_matching
 from ml_models.ocr.engine import ocr_init as init_ocr
 from ml_models.classifier.engine import classifier_init as init_classifier
 
+logger = logging.getLogger(__name__)
+
 
 # lifespan для загрузки моделей при старте сервера
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    init_matching()         # загрузка FAISS
-    init_ocr()              # загрузка EasyOCR
-    init_classifier()       # загрузка MobileNetV3
+
+    try:
+        init_matching()
+        logger.info("✅ FAISS matching engine loaded")
+    except Exception as e:
+        logger.error(f"❌ Failed to load FAISS: {e}", exc_info=True)
+        raise RuntimeError("Cannot start application: FAISS loading failed") from e
+
+    try:
+        init_ocr()
+        logger.info("✅ EasyOCR engine loaded")
+    except Exception as e:
+        logger.error(f"❌ Failed to load EasyOCR: {e}", exc_info=True)
+        raise RuntimeError("Cannot start application: EasyOCR loading failed") from e
+
+    try:
+        init_classifier()
+        logger.info("✅ MobileNetV3 classifier loaded")
+    except Exception as e:
+        logger.error(f"❌ Failed to load classifier: {e}", exc_info=True)
+        raise RuntimeError("Cannot start application: Classifier loading failed") from e
+
     yield
 
 

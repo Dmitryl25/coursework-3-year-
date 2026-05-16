@@ -28,6 +28,7 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/food_diary
+      SECRET_KEY: K7#mX2$pL9@nQ4&vR1!wZ6*jY3^hT8%s
       PYTHONUNBUFFERED: 1
       PYTHONDONTWRITEBYTECODE: 1
     volumes:
