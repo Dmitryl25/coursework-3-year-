@@ -42,10 +42,24 @@ def _resize_if_needed(image_path: str, max_side: int = 1280) -> str:
 
 def extract_items(image_path: str) -> List[dict]:
     _resize_if_needed(image_path)
-    results = reader.readtext(image_path, detail=0, paragraph=True)
+    results = reader.readtext(image_path, detail=1)
+    lines: list[tuple[float, list[tuple[float, str]]]] = []
+    for (bbox, text, _) in results:
+        y_center = (bbox[0][1] + bbox[2][1]) / 2
+        x_left = bbox[0][0]
+        merged = False
+        for line_y, line_blocks in lines:
+            if abs(y_center - line_y) < 20:
+                line_blocks.append((x_left, text))
+                merged = True
+                break
+        if not merged:
+            lines.append((y_center, [(x_left, text)]))
+
     items = []
-    for line in results:
-        name = normilize_ocr_text(line.strip())
+    for _, blocks in sorted(lines, key=lambda l: l[0]):
+        joined = " ".join(t for _, t in sorted(blocks, key=lambda b: b[0]))
+        name = normilize_ocr_text(joined.strip())
         if len(name) >= 3:
             items.append({"raw_text": name})
     return items
