@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
+import logging
 import os
 import uuid
+
+logger = logging.getLogger(__name__)
 
 from ml_models.classifier.engine import classify_image
 from ml_models.ocr.engine import extract_items
@@ -48,14 +51,18 @@ async def recognize(file: UploadFile = File(...),
                     db: Session = Depends(get_db),
 ):
     """Распознавание блюд на фото (без граммовки)."""
+    logger.info(f"[OCR/scan] user_id={current_user.id} file={file.filename}")
+
     file_path = await save_upload(file)
+    logger.info(f"[OCR/scan] saved to {file_path}")
+
     db_log = create_ocr_log(db, current_user.id, file_path)
 
     raw_items = extract_items(file_path)
 
     if not raw_items:
         update_ocr_status(db, db_log.id, OCRStatus.FAILED, None)
-
+        logger.warning(f"[OCR/scan] log_id={db_log.id} — nothing recognized")
         return OCRResponse(log_id=db_log.id,
                            status=OCRStatusEnum.FAILED, items=[])
 
@@ -64,6 +71,8 @@ async def recognize(file: UploadFile = File(...),
     update_ocr_status(db, db_log.id,
                       OCRStatus.SUCCESS,
                       " ".join(i["raw_text"] for i in raw_items))
+
+    logger.info(f"[OCR/scan] log_id={db_log.id} — recognized {len(items)} item(s): {[i.raw_text for i in items]}")
 
     return OCRResponse(
         log_id=db_log.id,
