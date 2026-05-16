@@ -42,7 +42,7 @@ services:
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 --loop asyncio --no-access-log
     
     mem_swappiness: 0
-    memswap_limit: 3G
+    memswap_limit: 5G
     deploy:
       resources:
         reservations:
