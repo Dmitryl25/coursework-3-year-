@@ -42,7 +42,7 @@ def _resize_if_needed(image_path: str, max_side: int = 1280) -> str:
 
 def extract_items(image_path: str) -> List[dict]:
     _resize_if_needed(image_path)
-    results = reader.readtext(image_path, detail=0)
+    results = reader.readtext(image_path, detail=0, paragraph=True)
     items = []
     for line in results:
         name = normilize_ocr_text(line.strip())
