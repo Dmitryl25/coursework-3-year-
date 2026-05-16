@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
+import asyncio
 import logging
 import os
 import uuid
@@ -58,7 +59,7 @@ async def recognize(file: UploadFile = File(...),
 
     db_log = create_ocr_log(db, current_user.id, file_path)
 
-    raw_items = extract_items(file_path)
+    raw_items = await asyncio.to_thread(extract_items, file_path)
 
     if not raw_items:
         update_ocr_status(db, db_log.id, OCRStatus.FAILED, None)
