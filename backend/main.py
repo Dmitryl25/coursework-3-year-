@@ -92,5 +92,10 @@ async def root():
 
 @app.get("/health")
 async def health_check(db: AsyncSession = Depends(get_db)):
-    await db.execute(text("SELECT 1"))
-    return {"status": "healthy"}
+    try:
+        await db.execute(text("SELECT 1"))
+        logger.info("[health] DB ping OK")
+        return {"status": "healthy"}
+    except Exception as e:
+        logger.error(f"[health] DB ping failed: {e}")
+        return {"status": "unhealthy", "detail": str(e)}
