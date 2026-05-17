@@ -3,12 +3,12 @@ from datetime import date, datetime, timezone, timedelta
 MSK = timezone(timedelta(hours=3))
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user
 from app.core.nutrition import calculate_macros, calculate_tdee
 from app.db.crud.diary import create_diary_entry, get_confirmed_meals_today, get_daily_stats
-from app.db.crud.food import get_food_by_id
+from app.db.crud.food import get_food_by_id, get_foods_by_ids
 from app.db.models import User
 from app.db.schemas import (
     DiaryEntryCreate,
@@ -29,7 +29,7 @@ ALL_MEALS = {"breakfast", "lunch", "dinner"}
 
 @router.get("/today", response_model=MealPlanResponse)
 async def get_meal_plan(current_user: User = Depends(get_current_user),
-                        db: Session = Depends(get_db)):
+                        db: AsyncSession = Depends(get_db)):
     """
     Сгенерировать план питания на оставшуюся часть дня.
 
@@ -40,14 +40,13 @@ async def get_meal_plan(current_user: User = Depends(get_current_user),
     targets = calculate_macros(tdee, current_user.goal)
 
     today = datetime.now(MSK).date()
-    daily = get_daily_stats(db, current_user.id, today)
-    # Все калории/БЖУ за сегодня (включая перекусы) — уменьшают бюджет плана
+    daily = await get_daily_stats(db, current_user.id, today)
     already_eaten = [{"calories": daily.total_calories,
                       "proteins": daily.total_proteins,
                       "fats": daily.total_fats,
                       "carbohydrates": daily.total_carbohydrates}]
 
-    confirmed = get_confirmed_meals_today(db, current_user.id)
+    confirmed = await get_confirmed_meals_today(db, current_user.id)
     meals_to_plan = sorted(ALL_MEALS - confirmed,
                            key=lambda m: ["breakfast", "lunch", "dinner"].index(m))
 
@@ -73,7 +72,6 @@ async def get_meal_plan(current_user: User = Depends(get_current_user),
             "message": "Все приёмы пищи на сегодня подтверждены.",
         }
 
-    # Один seed на день — продукты стабильны при повторных вызовах в течение дня
     daily_seed = today.toordinal()
     plan = get_planner().plan_day(targets, already_eaten, seed=daily_seed, meals_to_plan=meals_to_plan)
     plan["confirmed_meals"] = sorted(confirmed)
@@ -83,7 +81,7 @@ async def get_meal_plan(current_user: User = Depends(get_current_user),
 @router.post("/confirm", response_model=MealConfirmResponse)
 async def confirm_meal(payload: MealConfirmRequest,
                        current_user: User = Depends(get_current_user),
-                       db: Session = Depends(get_db)):
+                       db: AsyncSession = Depends(get_db)):
     """
     Подтвердить приём пищи из плана.
 
@@ -91,7 +89,7 @@ async def confirm_meal(payload: MealConfirmRequest,
     чтобы следующий GET /meal-plan/today пропустил этот приём.
 
     """
-    confirmed = get_confirmed_meals_today(db, current_user.id)
+    confirmed = await get_confirmed_meals_today(db, current_user.id)
     if payload.meal in confirmed:
         raise HTTPException(status_code=409,
                             detail=f"Приём пищи '{payload.meal}' уже подтверждён сегодня.")
@@ -106,7 +104,7 @@ async def confirm_meal(payload: MealConfirmRequest,
     }
 
     for item in payload.items:
-        food = get_food_by_id(db, item.food_id)
+        food = await get_food_by_id(db, item.food_id)
         if food is None:
             raise HTTPException(status_code=404,
                                 detail=f"Продукт с id={item.food_id} не найден")
@@ -116,7 +114,7 @@ async def confirm_meal(payload: MealConfirmRequest,
                                  datetime=now,
                                  meal_type=payload.meal)
 
-        create_diary_entry(db, current_user.id, entry)
+        await create_diary_entry(db, current_user.id, entry)
         saved_count += 1
 
         factor = item.portion_g / 100
@@ -125,7 +123,7 @@ async def confirm_meal(payload: MealConfirmRequest,
         total["fats"]          += food.fats          * factor
         total["carbohydrates"] += food.carbohydrates * factor
 
-    db.commit()
+    await db.commit()
 
     return MealConfirmResponse(
         meal=payload.meal,
@@ -140,7 +138,7 @@ async def confirm_meal(payload: MealConfirmRequest,
 @router.post("/from-menu", response_model=MenuPlanResponse)
 async def plan_from_menu(payload: MenuPlanRequest,
                          current_user: User = Depends(get_current_user),
-                         db: Session = Depends(get_db)):
+                         db: AsyncSession = Depends(get_db)):
     """
     Подобрать блюда и порции из меню, отсканированного через OCR.
 
@@ -152,12 +150,11 @@ async def plan_from_menu(payload: MenuPlanRequest,
     targets = calculate_macros(tdee, current_user.goal)
 
     today = datetime.now(MSK).date()
-    daily = get_daily_stats(db, current_user.id, today)
+    daily = await get_daily_stats(db, current_user.id, today)
 
     already_cal = daily.total_calories
     remaining_cal = max(targets["calories"] - already_cal, 0.0)
 
-    # Нормируем бюджет на запрошенный приём пищи
     meal = payload.meal
     ratio = MEAL_RATIOS.get(meal, 0.25)   # snack получает 25% как запасной вариант
     active_ratios = MEAL_RATIOS if meal in MEAL_RATIOS else {**MEAL_RATIOS, meal: ratio}
@@ -174,8 +171,8 @@ async def plan_from_menu(payload: MenuPlanRequest,
     if cal_budget < 50:
         raise HTTPException(status_code=400, detail="Калорийный бюджет на этот приём уже исчерпан.")
 
-    # Получаем продукты из БД
-    foods = [get_food_by_id(db, fid) for fid in payload.food_ids]
+    foods = await get_foods_by_ids(db, payload.food_ids)
+
     products = [
         {
             "id":            f.id,
@@ -213,15 +210,8 @@ async def plan_from_menu(payload: MenuPlanRequest,
 
 
 @router.post("/custom")
-async def get_custom_meal_plan(
-    targets: dict,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Сгенерировать план питания по произвольным целям БЖУ.
-
-    Body: {"calories": 2500, "proteins": 180, "fats": 70, "carbohydrates": 280}
-    """
+async def get_custom_meal_plan(targets: dict,
+                               current_user: User = Depends(get_current_user)):
     required = {"calories", "proteins", "fats", "carbohydrates"}
     missing = required - targets.keys()
     if missing:

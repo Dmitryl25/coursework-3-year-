@@ -1,24 +1,33 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+import asyncio
 import bcrypt
 
 from ..models import User
 from ..schemas import UserRegister, UserWithTDEE
 from app.core.nutrition import calculate_tdee
 
-def get_user_by_email(db: Session, email: str) -> User | None:
+
+async def get_user_by_email(db: AsyncSession,
+                            email: str) -> User | None:
     """Получить пользователя по email"""
-    return db.query(User).filter(User.email == email).first()
+    result = await db.execute(select(User).where(User.email == email))
+    return result.scalar_one_or_none()
 
-def get_user_by_id(db: Session, user_id: int) -> User | None:
+
+async def get_user_by_id(db: AsyncSession,
+                         user_id: int) -> User | None:
     """Получить пользователя по ID"""
-    return db.query(User).filter(User.id == user_id).first()
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
 
-def create_user(db: Session, user: UserRegister) -> User:
+
+async def create_user(db: AsyncSession,
+                      user: UserRegister) -> User:
     """Создать нового пользователя"""
-    # Хешируем пароль
-    salt = bcrypt.gensalt()
-    hashed_password = bcrypt.hashpw(user.password.encode('utf-8'), salt)
-    
+    salt = await asyncio.to_thread(bcrypt.gensalt)
+    hashed_password = await asyncio.to_thread(bcrypt.hashpw, user.password.encode('utf-8'), salt)
+
     db_user = User(
         email=user.email,
         password_hash=hashed_password.decode('utf-8'),
@@ -30,28 +39,32 @@ def create_user(db: Session, user: UserRegister) -> User:
         goal=user.goal
     )
     db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
+    await db.commit()
+    await db.refresh(db_user)
     return db_user
 
-def verify_password(db: Session, email: str, password: str) -> User | None:
+
+async def verify_password(db: AsyncSession,
+                          email: str,
+                          password: str) -> User | None:
     """Проверить пароль пользователя"""
-    user = get_user_by_email(db, email)
+    user = await get_user_by_email(db, email)
     if not user:
         return None
-    
-    if bcrypt.checkpw(password.encode('utf-8'), user.password_hash.encode('utf-8')):
+    if await asyncio.to_thread(bcrypt.checkpw, password.encode('utf-8'), user.password_hash.encode('utf-8')):
         return user
     return None
 
-def get_user_with_tdee(db: Session, user_id: int) -> UserWithTDEE | None:
+
+async def get_user_with_tdee(db: AsyncSession,
+                             user_id: int) -> UserWithTDEE | None:
     """Получить пользователя с рассчитанным TDEE"""
-    user = get_user_by_id(db, user_id)
+    user = await get_user_by_id(db, user_id)
     if not user:
         return None
-    
+
     tdee = calculate_tdee(user)
-    
+
     return UserWithTDEE(
         id=user.id,
         email=user.email,
@@ -67,12 +80,17 @@ def get_user_with_tdee(db: Session, user_id: int) -> UserWithTDEE | None:
     )
 
 
-def update_user_goal(db: Session, user: User, goal) -> User:
+async def update_user_goal(db: AsyncSession,
+                           user: User,
+                           goal) -> User:
     """Обновить цель пользователя"""
     user.goal = goal
     return user
 
-def update_user_profile(db: Session, user: User, data) -> User:
+
+async def update_user_profile(db: AsyncSession,
+                              user: User,
+                              data) -> User:
     """Обновить антропометрические данные (только переданные поля)"""
     for field in ("weight", "height", "age", "activity_level", "gender"):
         value = getattr(data, field, None)

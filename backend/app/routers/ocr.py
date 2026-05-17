@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 import asyncio
 import logging
 import os
@@ -7,7 +7,7 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
-from ml_models.classifier.engine import classify_image
+from ml_models.classifier.engine import classify_image, FOOD101_RU
 from ml_models.ocr.engine import extract_items
 from app.core.dependencies import get_current_user
 from app.db.crud import (
@@ -37,41 +37,44 @@ UPLOAD_DIR = "uploads/photos"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
+def write_file(path: str, data: bytes) -> None:
+    with open(path, "wb") as f:
+        f.write(data)
+
+
 async def save_upload(file: UploadFile) -> str:
     ext = os.path.splitext(file.filename)[1]
     file_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4()}{ext}")
     content = await file.read()
-    with open(file_path, "wb") as f:
-        f.write(content)
+    await asyncio.to_thread(write_file, file_path, content)
     return file_path
 
 
 @router.post("/scan", response_model=OCRResponse)
 async def recognize(file: UploadFile = File(...),
                     current_user: User = Depends(get_current_user),
-                    db: Session = Depends(get_db),
-):
+                    db: AsyncSession = Depends(get_db)):
     """Распознавание блюд на фото (без граммовки)."""
     logger.info(f"[OCR/scan] user_id={current_user.id} file={file.filename}")
 
     file_path = await save_upload(file)
     logger.info(f"[OCR/scan] saved to {file_path}")
 
-    db_log = create_ocr_log(db, current_user.id, file_path)
+    db_log = await create_ocr_log(db, current_user.id, file_path)
 
     raw_items = await asyncio.to_thread(extract_items, file_path)
 
     if not raw_items:
-        update_ocr_status(db, db_log.id, OCRStatus.FAILED, None)
+        await update_ocr_status(db, db_log.id, OCRStatus.FAILED, None)
         logger.warning(f"[OCR/scan] log_id={db_log.id} — nothing recognized")
         return OCRResponse(log_id=db_log.id,
                            status=OCRStatusEnum.FAILED, items=[])
 
     items = [OCRRawItem(raw_text=i["raw_text"]) for i in raw_items]
 
-    update_ocr_status(db, db_log.id,
-                      OCRStatus.SUCCESS,
-                      " ".join(i["raw_text"] for i in raw_items))
+    await update_ocr_status(db, db_log.id,
+                            OCRStatus.SUCCESS,
+                            " ".join(i["raw_text"] for i in raw_items))
 
     logger.info(f"[OCR/scan] log_id={db_log.id} — recognized {len(items)} item(s): {[i.raw_text for i in items]}")
 
@@ -86,9 +89,9 @@ async def recognize(file: UploadFile = File(...),
 async def process_ocr(log_id: int,
                       payload: MatchRequest,
                       current_user: User = Depends(get_current_user),
-                      db: Session = Depends(get_db)):
-    """FAISS-поиск семантически близких продуктов из базы."""
-    log = get_ocr_log_by_id(db, log_id)
+                      db: AsyncSession = Depends(get_db)):
+    """FAISS-поиск семантически близких продуктов из базы"""
+    log = await get_ocr_log_by_id(db, log_id)
     if not log:
         raise HTTPException(status_code=404, detail="OCR log not found")
     if log.user_id != current_user.id:
@@ -96,8 +99,10 @@ async def process_ocr(log_id: int,
 
     recognized = []
     for item in payload.items:
-        result = match(item.raw_text) or match(item.raw_text.replace(" ", ""))
-        food = get_food_by_id(db, result["matched_food_id"]) if result else None
+        result = await asyncio.to_thread(match, item.raw_text)
+        if not result:
+            result = await asyncio.to_thread(match, item.raw_text.replace(" ", ""))
+        food = await get_food_by_id(db, result["matched_food_id"]) if result else None
         recognized.append(
             RecognizedItem(raw_text=item.raw_text,
                            matched_food_id=result["matched_food_id"] if result else None,
@@ -115,7 +120,7 @@ async def process_ocr(log_id: int,
 @router.post("/classify", response_model=RecognitionResponse)
 async def classify(file: UploadFile = File(...),
                    current_user: User = Depends(get_current_user),
-                   db: Session = Depends(get_db)):
+                   db: AsyncSession = Depends(get_db)):
     """
     Распознавание блюда на фото через классификатор (MobileNetV3, Food101).
 
@@ -124,16 +129,16 @@ async def classify(file: UploadFile = File(...),
     затем отправляет в POST /diary/bulk.
     """
     file_path = await save_upload(file)
-    db_log = create_ocr_log(db, current_user.id, file_path)
-    update_ocr_status(db, db_log.id, OCRStatus.SUCCESS, None)
+    db_log = await create_ocr_log(db, current_user.id, file_path)
+    await update_ocr_status(db, db_log.id, OCRStatus.SUCCESS, None)
 
-    predictions = classify_image(file_path, top_k=3)
+    predictions = await asyncio.to_thread(classify_image, file_path, top_k=3)
 
     recognized = []
     for pred in predictions:
-        result = match(pred["class_name"])
-        food = get_food_by_id(db, result["matched_food_id"]) if result else None
-        # Итоговая уверенность — произведение confidence классификатора и FAISS
+        query = FOOD101_RU.get(pred["class_name"], pred["class_name"])
+        result = await asyncio.to_thread(match, query)
+        food = await get_food_by_id(db, result["matched_food_id"]) if result else None
         combined_confidence = round(
             pred["confidence"] * (result["confidence"] if result else 0.0), 4
         )
@@ -153,14 +158,14 @@ async def classify(file: UploadFile = File(...),
 
 @router.get("/pending", response_model=list[OCRLogResponse])
 async def get_pending(limit: int = 10,
-                      db: Session = Depends(get_db)):
-    """Получить необработанные OCR задачи."""
-    return get_pending_ocr_logs(db, limit)
+                      db: AsyncSession = Depends(get_db)):
+    """Получить необработанные OCR задачи"""
+    return await get_pending_ocr_logs(db, limit)
 
 
 @router.get("/history", response_model=list[OCRLogResponse])
 async def get_user_history(current_user: User = Depends(get_current_user),
                            limit: int = 20,
-                           db: Session = Depends(get_db)):
-    """История OCR пользователя."""
-    return get_user_ocr_logs(db, current_user.id, limit)
+                           db: AsyncSession = Depends(get_db)):
+    """История OCR пользователя"""
+    return await get_user_ocr_logs(db, current_user.id, limit)

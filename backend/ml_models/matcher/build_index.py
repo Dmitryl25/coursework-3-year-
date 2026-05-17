@@ -1,16 +1,36 @@
-import pandas as pd
-from ml_models.matcher.vectorizer import model, encode
-import faiss, json
+import os
+import sys
+sys.path.insert(0, "/app")
 
-df = pd.read_csv("../../data/products.csv")
-names = df["name"].str.lower().tolist()
-ids = df["id"].tolist()
+import psycopg2
+import faiss
+import json
+from ml_models.matcher.vectorizer import encode, init as init_vectorizer
 
-vectors = model.encode(names, normalize_embeddings=True)
+init_vectorizer()
+from ml_models.matcher.vectorizer import model
 
-index = faiss.IndexFlatIP(384)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/food_diary")
+
+conn = psycopg2.connect(DATABASE_URL)
+cur = conn.cursor()
+cur.execute("SELECT id, name FROM foods ORDER BY id")
+rows = cur.fetchall()
+cur.close()
+conn.close()
+
+ids = [r[0] for r in rows]
+names = [r[1].lower() for r in rows]
+print(f"Продуктов в БД: {len(names)}")
+
+vectors = model.encode(names, normalize_embeddings=True, show_progress_bar=True)
+
+index = faiss.IndexFlatIP(vectors.shape[1])
 index.add(vectors)
-faiss.write_index(index, "food.index")
 
-with open("food_ids.json", "w") as f:
+BASE = os.path.dirname(__file__)
+faiss.write_index(index, os.path.join(BASE, "food.index"))
+with open(os.path.join(BASE, "food_ids.json"), "w") as f:
     json.dump(ids, f)
+
+print(f"Готово — {index.ntotal} векторов, id из БД")

@@ -7,6 +7,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from app.db.models import Base
 from app.db.session import engine
 from app.services.matching import faiss_init as init_matching
@@ -19,7 +20,9 @@ logger = logging.getLogger(__name__)
 # lifespan для загрузки моделей при старте сервера
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+        await conn.run_sync(Base.metadata.create_all)
 
     try:
         init_matching()

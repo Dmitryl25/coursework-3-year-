@@ -58,9 +58,9 @@ class User(Base):
 
 class Food(Base):
     __tablename__ = "foods"
-    
+
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), index=True, nullable=False)
+    name = Column(String(255), nullable=False)
     
     # КБЖУ на 100 грамм
     calories = Column(Integer, nullable=False)  # ккал
@@ -76,8 +76,13 @@ class Food(Base):
 
 
     diary_entries = relationship("DiaryEntry", back_populates="food")
-    
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_food_name_trgm", "name", postgresql_using="gin",
+              postgresql_ops={"name": "gin_trgm_ops"}),
+    )
 
 class DiaryEntry(Base):
     __tablename__ = "diary_entries"

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 
 from app.db.session import get_db
@@ -16,36 +16,42 @@ from ..db.crud import (
 
 router = APIRouter(prefix="/food", tags=["food"])
 
+
 @router.get("/search", response_model=List[FoodResponse])
-async def search(query: str = Query(..., min_length=1, description="Search query"),
+async def search(query: str = Query(..., min_length=1,
+                                    description="Search query"),
                  limit: int = Query(20, ge=1, le=100),
-                 db: Session = Depends(get_db)):
+                 db: AsyncSession = Depends(get_db)):
     """Поиск продуктов по названию"""
-    foods = search_foods(db, query, limit)
-    return foods
+    return await search_foods(db, query, limit)
+
 
 @router.get("/search/advanced", response_model=List[FoodResponse])
 async def search_advanced(query: str = Query(..., min_length=1),
                           min_calories: Optional[int] = None,
                           max_calories: Optional[int] = None,
                           limit: int = 20,
-                          db: Session = Depends(get_db)):
+                          db: AsyncSession = Depends(get_db)):
     """Расширенный поиск продуктов с фильтром по калориям"""
-    foods = search_foods_advanced(db, query, min_calories, max_calories, limit)
-    return foods
+    return await search_foods_advanced(db,
+                                       query,
+                                       min_calories,
+                                       max_calories,
+                                       limit)
+
 
 @router.get("/popular", response_model=List[FoodResponse])
 async def popular(limit: int = 10,
-                  db: Session = Depends(get_db)):
+                  db: AsyncSession = Depends(get_db)):
     """Получить популярные продукты"""
-    popular = get_popular_foods(db, limit)
-    return popular
+    return await get_popular_foods(db, limit)
+
 
 @router.get("/{food_id}", response_model=FoodResponse)
 async def get_food(food_id: int,
-                   db: Session = Depends(get_db)):
+                   db: AsyncSession = Depends(get_db)):
     """Получить продукт по ID"""
-    food = get_food_by_id(db, food_id)
+    food = await get_food_by_id(db, food_id)
     if not food:
         raise HTTPException(status_code=404, detail="Food not found")
     return food
@@ -53,8 +59,7 @@ async def get_food(food_id: int,
 
 @router.post("/", response_model=FoodResponse, status_code=201)
 async def create_food_endpoint(food: FoodCreate,
-                               db: Session = Depends(get_db),
+                               db: AsyncSession = Depends(get_db),
                                current_user: User = Depends(get_current_user)):
-    """Создать новый продукт (требует авторизация)"""
-    db_food = create_food(db, food)
-    return db_food
+    """Создать новый продукт (требует авторизации)"""
+    return await create_food(db, food)

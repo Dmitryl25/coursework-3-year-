@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.core.nutrition import calculate_tdee, calculate_macros
 from app.db.crud.diary import get_daily_stats
@@ -11,13 +11,14 @@ from app.db.models import User
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
+
 @router.get("/today")
 async def get_recommendations(current_user: User = Depends(get_current_user),
-                              db: Session = Depends(get_db)):
+                              db: AsyncSession = Depends(get_db)):
     """Получение рекомендаций по текущим TDEE и цели пользователя"""
     tdee = calculate_tdee(current_user)
     target_calories = calculate_macros(tdee, current_user.goal)["calories"]
-    daily_stats = get_daily_stats(db, current_user.id, datetime.now(MSK).date())
+    daily_stats = await get_daily_stats(db, current_user.id, datetime.now(MSK).date())
     remaining_calories = target_calories - daily_stats.total_calories
     response = ""
     if remaining_calories > 500:

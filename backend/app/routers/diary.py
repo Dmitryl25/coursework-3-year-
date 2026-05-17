@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import date, datetime, timezone, timedelta
 from typing import Optional, List
 
@@ -32,15 +32,15 @@ router = APIRouter(prefix="/diary", tags=["diary"])
 @router.post("/entry", response_model=DiaryEntryResponse, status_code=201)
 async def create_entry(entry: DiaryEntryCreate,
                        current_user: User = Depends(get_current_user),
-                       db: Session = Depends(get_db)):
+                       db: AsyncSession = Depends(get_db)):
     """Создать запись о приеме пищи"""
-    food = get_food_by_id(db, entry.food_id)
+    food = await get_food_by_id(db, entry.food_id)
     if not food:
         raise HTTPException(status_code=404, detail="Food not found")
 
-    db_entry = create_diary_entry(db, current_user.id, entry)
-    db.commit()
-    db.refresh(db_entry)
+    db_entry = await create_diary_entry(db, current_user.id, entry)
+    await db.commit()
+    await db.refresh(db_entry)
 
     return DiaryEntryResponse(
         id=db_entry.id,
@@ -61,13 +61,13 @@ async def create_entry(entry: DiaryEntryCreate,
 @router.post("/bulk", response_model=List[DiaryEntryResponse], status_code=201)
 async def create_bulk(payload: BulkDiaryCreate,
                       current_user: User = Depends(get_current_user),
-                      db: Session = Depends(get_db)):
+                      db: AsyncSession = Depends(get_db)):
     """Создать несколько записей за один приём пищи"""
     db_entries = []
     foods = []
 
     for item in payload.items:
-        food = get_food_by_id(db, item.food_id)
+        food = await get_food_by_id(db, item.food_id)
         if food is None:
             raise HTTPException(status_code=404, detail=f"Продукт с id={item.food_id} не найден")
         entry = DiaryEntryCreate(
@@ -76,15 +76,15 @@ async def create_bulk(payload: BulkDiaryCreate,
             datetime=payload.datetime,
             meal_type=payload.meal_type,
         )
-        db_entry = create_diary_entry(db, current_user.id, entry)
+        db_entry = await create_diary_entry(db, current_user.id, entry)
         db_entries.append(db_entry)
         foods.append(food)
 
-    db.commit()
+    await db.commit()
 
     results = []
     for db_entry, food in zip(db_entries, foods):
-        db.refresh(db_entry)
+        await db.refresh(db_entry)
         results.append(DiaryEntryResponse(
             id=db_entry.id,
             user_id=db_entry.user_id,
@@ -105,14 +105,14 @@ async def create_bulk(payload: BulkDiaryCreate,
 @router.get("/entries/{target_date}", response_model=List[DiaryEntryResponse])
 async def get_day_entries(target_date: str,
                           current_user: User = Depends(get_current_user),
-                          db: Session = Depends(get_db)):
+                          db: AsyncSession = Depends(get_db)):
     """Получить список записей о приёмах пищи за конкретный день."""
     try:
         parsed_date = datetime.strptime(target_date, "%Y-%m-%d").date()
     except ValueError:
         raise HTTPException(status_code=400, detail="Неверный формат даты. Используй YYYY-MM-DD")
 
-    entries = get_diary_entries_by_date(db, current_user.id, parsed_date)
+    entries = await get_diary_entries_by_date(db, current_user.id, parsed_date)
     return [
         DiaryEntryResponse(
             id=e.id,
@@ -135,20 +135,20 @@ async def get_day_entries(target_date: str,
 @router.get("/day/{date}", response_model=DailySummary)
 async def get_day(date: str,
                   current_user: User = Depends(get_current_user),
-                  db: Session = Depends(get_db)):
+                  db: AsyncSession = Depends(get_db)):
     """Получить сводку за день"""
     try:
         target_date = datetime.strptime(date, "%Y-%m-%d").date()
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
 
-    return get_daily_summary_with_tdee(db, current_user, target_date)
+    return await get_daily_summary_with_tdee(db, current_user, target_date)
 
 
 @router.get("/week", response_model=WeeklyStats)
 async def get_week(end_date: Optional[str] = None,
                    current_user: User = Depends(get_current_user),
-                   db: Session = Depends(get_db)):
+                   db: AsyncSession = Depends(get_db)):
     """Получить статистику за неделю"""
     if end_date:
         try:
@@ -158,18 +158,18 @@ async def get_week(end_date: Optional[str] = None,
     else:
         target_date = datetime.now(MSK).date()
 
-    return get_weekly_stats(db, current_user.id, target_date)
+    return await get_weekly_stats(db, current_user.id, target_date)
 
 
 @router.delete("/entry/{entry_id}")
 async def delete_entry(entry_id: int,
                        current_user: User = Depends(get_current_user),
-                       db: Session = Depends(get_db)):
+                       db: AsyncSession = Depends(get_db)):
     """Удалить запись из дневника"""
-    deleted = delete_diary_entry(db, entry_id, current_user.id)
+    deleted = await delete_diary_entry(db, entry_id, current_user.id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Entry not found")
-    db.commit()
+    await db.commit()
     return {"status": "deleted", "entry_id": entry_id}
 
 
@@ -181,11 +181,11 @@ class WeightUpdate(BaseModel):
 async def update_entry(entry_id: int,
                        payload: WeightUpdate,
                        current_user: User = Depends(get_current_user),
-                       db: Session = Depends(get_db)):
+                       db: AsyncSession = Depends(get_db)):
     """Обновить вес порции в записи"""
-    entry = update_diary_entry(db, entry_id, current_user.id, payload.weight)
+    entry = await update_diary_entry(db, entry_id, current_user.id, payload.weight)
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
-    db.commit()
-    db.refresh(entry)
+    await db.commit()
+    await db.refresh(entry)
     return {"status": "updated", "entry_id": entry_id, "new_weight": payload.weight}
