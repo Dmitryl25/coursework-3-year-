@@ -2,8 +2,13 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 import time
 import sys
+import pymorphy3
 
 model = None
+_morph = pymorphy3.MorphAnalyzer()
+
+def lemmatize(text: str) -> str:
+    return ' '.join(_morph.parse(w)[0].normal_form for w in text.lower().split())
 
 def init():
     global model
@@ -15,4 +20,4 @@ def init():
     sys.stdout.flush()
 
 def encode(text: str) -> np.ndarray:
-    return model.encode(text.lower(), normalize_embeddings=True)
+    return model.encode(lemmatize(text), normalize_embeddings=True)

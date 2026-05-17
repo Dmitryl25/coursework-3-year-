@@ -8,7 +8,7 @@ import json
 from ml_models.matcher.vectorizer import encode, init as init_vectorizer
 
 init_vectorizer()
-from ml_models.matcher.vectorizer import model
+from ml_models.matcher.vectorizer import model, lemmatize
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/food_diary")
 
@@ -20,7 +20,7 @@ cur.close()
 conn.close()
 
 ids = [r[0] for r in rows]
-names = [r[1].lower() for r in rows]
+names = [lemmatize(r[1]) for r in rows]
 print(f"Продуктов в БД: {len(names)}")
 
 vectors = model.encode(names,

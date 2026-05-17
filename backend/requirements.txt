@@ -18,3 +18,4 @@ numpy
 torch
 torchvision
 Pillow
+pymorphy3
