@@ -12,10 +12,17 @@ def _make_async_url(url: str) -> str:
     return url
 
 
+_connect_args = {}
+if settings.DATABASE_URL.startswith(("postgresql", "postgres")):
+    _connect_args = {"command_timeout": 5}
+
 engine = create_async_engine(
     _make_async_url(settings.DATABASE_URL),
     pool_pre_ping=True,
-    pool_recycle=1800,
+    pool_recycle=300,
+    pool_size=5,
+    max_overflow=10,
+    connect_args=_connect_args,
 )
 
 AsyncSessionLocal = async_sessionmaker(

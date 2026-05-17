@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.session import get_db
 
 logging.basicConfig(
     level=logging.INFO,
@@ -89,5 +91,6 @@ async def root():
     }
 
 @app.get("/health")
-async def health_check():
+async def health_check(db: AsyncSession = Depends(get_db)):
+    await db.execute(text("SELECT 1"))
     return {"status": "healthy"}
