@@ -90,7 +90,7 @@ async def process_ocr(log_id: int,
                       payload: MatchRequest,
                       current_user: User = Depends(get_current_user),
                       db: AsyncSession = Depends(get_db)):
-    """FAISS-поиск семантически близких продуктов из базы"""
+    """Гибридный поиск семантически близких продуктов из базы"""
     log = await get_ocr_log_by_id(db, log_id)
     if not log:
         raise HTTPException(status_code=404, detail="OCR log not found")
