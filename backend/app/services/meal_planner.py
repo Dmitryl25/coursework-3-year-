@@ -258,12 +258,14 @@ class MealPlanner:
         available_cats = eligible["category"].unique().tolist()
 
         mandatory_cats = [c for c in mandatory if c in available_cats]
-        optional_pool = [c for c in priority if c not in mandatory and c in available_cats]
+        # Приоритетные и rest перемешиваются раздельно:
+        # priority даёт разнообразие внутри своей группы, rest никогда не вытесняет priority.
+        optional_priority = [c for c in priority if c not in mandatory and c in available_cats]
         rest = [c for c in available_cats if c not in priority and c not in mandatory]
-        optional_pool.extend(rest)
-        rng.shuffle(optional_pool)
+        rng.shuffle(optional_priority)
+        rng.shuffle(rest)
 
-        ordered = mandatory_cats + optional_pool
+        ordered = mandatory_cats + optional_priority + rest
 
         selected: list[dict] = []
         blocked: set[str] = set()
