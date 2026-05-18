@@ -36,14 +36,30 @@ MEAL_RATIOS: dict[str, float] = {
 # Категории, которые в первую очередь попадают в каждый приём пищи
 PRIORITY_CATEGORIES: dict[str, list[str]] = {
     "breakfast": ["porridge", "eggs", "dairy", "fruit", "nuts", "bakery"],
-    "lunch":     ["meat", "fish", "seafood", "soup", "garnish", "vegetable", "ready_meal"],
-    "dinner":    ["meat", "fish", "seafood", "garnish", "vegetable", "dairy", "ready_meal"],
+    "lunch":     ["meat","soup", "garnish", "fish", "seafood",  "vegetable", "ready_meal", "salad"],
+    "dinner":    ["meat", "garnish", "fish", "seafood",  "vegetable", "dairy", "ready_meal", "salad"],
 }
 
 # Дополнительные категории, доступные для приёма пищи независимо от meal_type в CSV.
 EXTRA_ELIGIBLE_CATEGORIES: dict[str, list[str]] = {
     "dinner": ["garnish", "seafood", "ready_meal"],
     "lunch":  ["seafood", "ready_meal"],
+}
+
+# Гарантированные категории: список альтернативных наборов обязательных слотов.
+# Каждый retry случайно выбирает один из вариантов — лучший score побеждает.
+# Для обеда: либо классика (мясо + гарнир), либо готовое блюдо (заменяет оба).
+MANDATORY_CATEGORIES: dict[str, list[list[str]]] = {
+    "breakfast": [["porridge"]],
+    "lunch":     [["meat", "garnish"], ["ready_meal"]],
+    "dinner":    [[]],
+}
+
+# Взаимоисключающие категории: выбор одной блокирует остальные в том же приёме пищи.
+CATEGORY_CONFLICTS: dict[str, frozenset[str]] = {
+    "ready_meal": frozenset({"meat", "garnish"}),
+    "meat":       frozenset({"ready_meal"}),
+    "garnish":    frozenset({"ready_meal"}),
 }
 
 # Категории, которые никогда не выбираются как основное блюдо.
@@ -230,20 +246,36 @@ class MealPlanner:
                         eligible: pd.DataFrame,
                         meal_name: str,
                         rng: random.Random) -> list[dict]:
-        """Выбрать по одному продукту из разных категорий."""
+        """Выбрать по одному продукту из разных категорий.
+
+        Обязательные категории (MANDATORY_CATEGORIES) всегда занимают первые слоты.
+        Оставшиеся слоты заполняются случайно из пула: приоритетные (без обязательных) + прочие.
+        Это гарантирует, что все категории из PRIORITY_CATEGORIES со временем попадают в план.
+        """
+        alternatives = MANDATORY_CATEGORIES.get(meal_name, [[]])
+        mandatory = rng.choice(alternatives)
         priority = PRIORITY_CATEGORIES.get(meal_name, [])
         available_cats = eligible["category"].unique().tolist()
 
-        ordered: list[str] = [c for c in priority if c in available_cats]
-        rest = [c for c in available_cats if c not in ordered]
-        rng.shuffle(rest)
-        ordered.extend(rest)
+        mandatory_cats = [c for c in mandatory if c in available_cats]
+        optional_pool = [c for c in priority if c not in mandatory and c in available_cats]
+        rest = [c for c in available_cats if c not in priority and c not in mandatory]
+        optional_pool.extend(rest)
+        rng.shuffle(optional_pool)
+
+        ordered = mandatory_cats + optional_pool
 
         selected: list[dict] = []
-        for category in ordered[:MAX_CATEGORIES_PER_MEAL]:
-            pool = eligible[eligible["category"] == category]
-            row = pool.sample(1, random_state=rng.randint(0, 2**31)).iloc[0]
+        blocked: set[str] = set()
+        for category in ordered:
+            if len(selected) >= MAX_CATEGORIES_PER_MEAL:
+                break
+            if category in blocked:
+                continue
+            cat_df = eligible[eligible["category"] == category]
+            row = cat_df.sample(1, random_state=rng.randint(0, 2**31)).iloc[0]
             selected.append(row.to_dict())
+            blocked |= CATEGORY_CONFLICTS.get(category, frozenset())
 
         return selected
 
