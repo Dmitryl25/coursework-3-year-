@@ -28,12 +28,8 @@ async def create_diary_entry(db: AsyncSession,
 async def get_diary_entries_by_date(db: AsyncSession,
                                     user_id: int, target_date: date) -> List:
     """Получить все записи за конкретную дату"""
-    start_date = datetime.combine(target_date,
-                                  datetime.min.time(),
-                                  tzinfo=MSK)
-    end_date = datetime.combine(target_date,
-                                datetime.max.time(),
-                                tzinfo=MSK)
+    start_date = datetime.combine(target_date, datetime.min.time(), tzinfo=MSK).astimezone(timezone.utc)
+    end_date = datetime.combine(target_date, datetime.max.time(), tzinfo=MSK).astimezone(timezone.utc)
 
     result = await db.execute(
         select(
@@ -71,12 +67,8 @@ async def get_daily_stats(db: AsyncSession,
                           user_id: int,
                           target_date: date) -> DailyStats:
     """Получить статистику за день"""
-    start_date = datetime.combine(target_date,
-                                  datetime.min.time(),
-                                  tzinfo=MSK)
-    end_date = datetime.combine(target_date,
-                                datetime.max.time(),
-                                tzinfo=MSK)
+    start_date = datetime.combine(target_date, datetime.min.time(), tzinfo=MSK).astimezone(timezone.utc)
+    end_date = datetime.combine(target_date, datetime.max.time(), tzinfo=MSK).astimezone(timezone.utc)
 
     result = await db.execute(
         select(
@@ -136,8 +128,8 @@ async def get_weekly_stats(db: AsyncSession,
         end_date = datetime.now(MSK).date()
 
     start_date = end_date - timedelta(days=6)
-    week_start_dt = datetime.combine(start_date, datetime.min.time(), tzinfo=MSK)
-    week_end_dt = datetime.combine(end_date, datetime.max.time(), tzinfo=MSK)
+    week_start_dt = datetime.combine(start_date, datetime.min.time(), tzinfo=MSK).astimezone(timezone.utc)
+    week_end_dt = datetime.combine(end_date, datetime.max.time(), tzinfo=MSK).astimezone(timezone.utc)
 
     from sqlalchemy import cast, Date as SADate, func as sqlfunc
     result = await db.execute(
@@ -189,8 +181,8 @@ async def get_confirmed_meals_today(db: AsyncSession,
                                     user_id: int) -> set:
     """Вернуть все meal_type из дневника за сегодня. Snack в результате не блокирует план — проверка идёт в роутере через ALL_MEALS"""
     today = datetime.now(MSK).date()
-    start_date = datetime.combine(today, datetime.min.time(), tzinfo=MSK)
-    end_date = datetime.combine(today, datetime.max.time(), tzinfo=MSK)
+    start_date = datetime.combine(today, datetime.min.time(), tzinfo=MSK).astimezone(timezone.utc)
+    end_date = datetime.combine(today, datetime.max.time(), tzinfo=MSK).astimezone(timezone.utc)
 
     result = await db.execute(
         select(DiaryEntry.meal_type)
